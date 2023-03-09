@@ -11,14 +11,26 @@ from flask import request, render_template
 
 from nbc import wallet
 from nbc.util import base36
-from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM
+from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM, ssi_login_init
 
-_locker_expired = 86400    # default is 1 day, refresh_period*(session_limit+1)
+_real_website = ''
+_app_admin_pubkey = ''
+_app_strategy_str = '{}'
+
+_locker_expired = 86400    # default is 1 day, would config as: refresh_period*(session_limit+1)
 
 def md_base_dir(login_sess):
   file_dir = os.path.split(__file__)[0]
   file_dir = os.path.split(file_dir)[0]
   return os.path.join(file_dir,'data',login_sess)
+
+@app.route('/')
+@app.route('/index.html')
+def index_page():
+  info = { 'real_website': _real_website,
+    'app_admin_pubkey': _app_admin_pubkey,
+    'app_strategy': _app_strategy_str }
+  return render_template('index.html',info=info)
 
 @app.route('/md/<login_sess>')
 def get_markdown(login_sess):
@@ -305,6 +317,14 @@ def post_publish():
 #----
 
 def netlog_init(config):
+  global _real_website, _app_admin_pubkey, _app_strategy_str
+  
+  _real_website = config['real_website']
+  _app_admin_pubkey = wallet.Address(priv_key=config['app_admin_wif'].encode('utf-8')).publicKey().hex()
+  _app_strategy_str = json.dumps(config['strategy'],indent=None,separators=(',',':'))
+  
   global _locker_expired
   stg = config['strategy']
   _locker_expired = refresh_periods[stg.get('session_type',1)&0x07] * (stg.get('session_limit',14)+1)
+  
+  ssi_login_init(config)

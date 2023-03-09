@@ -239,7 +239,7 @@ function closeDialog() {
   inShowing = false;
 }
 
-let nalDialogResolve = null, nalDialogReject = null; // hide here for security
+let nalDialogResolve = null, nalDialogReject = null;
 let nalCheckPassId = 0;
 
 return ( (name,args) => {
@@ -273,7 +273,7 @@ return ( (name,args) => {
       hintDialog = document.createElement('div');
       hintDialog.setAttribute('name','dlg-hint');
       hintDialog.setAttribute('style','display:none; background:white; position:relative; width:360px; left:calc(50% - 180px); top:68px; border-radius:0.25rem;');
-      hintDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">待授权</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div style="border:solid rgba(0,0,0,0.2); border-width:1px 0; padding:1.25rem;"><p style="margin: 0.75rem 0 1rem">请到 <a href="https://account.nb-chain.cn" target="_blank">account.nb-chain.cn</a> 网页实施授权，或借助 NAL 浏览器插件完成授权。</p></div>';
+      hintDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">待授权</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div style="border:solid rgba(0,0,0,0.2); border-width:1px 0; padding:1.25rem;"><p style="margin: 0.75rem 0 1rem">请到 NAL 账号管理器主页实施授权，或借助 chrome 浏览器插件完成授权。</p></div>';
       maskNode.appendChild(hintDialog);
       
       let node = hintDialog.querySelector('button[name="btn-cancel"]');
@@ -517,10 +517,10 @@ function shuffle(arr) {
 
 NAL_.strategy = function(stg) {
   if (!stg) return STRATEGY;
-  STRATEGY = stg;
   DEFAULT_PERIOD = session_periods[stg.session_type];
   DEFAULT_REFRESH = refresh_periods[stg.session_type];
   REFRESH_LIMIT   = stg.session_limit;
+  STRATEGY = stg;
   return [stg,DEFAULT_PERIOD,DEFAULT_REFRESH,REFRESH_LIMIT];
 };
 
