@@ -1,6 +1,6 @@
 # root/netlog.py
 
-import os, time, hashlib, base64, json, traceback
+import os, time, base64, json, traceback
 from binascii import hexlify, unhexlify
 
 import logging

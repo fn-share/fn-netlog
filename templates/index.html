@@ -1110,9 +1110,7 @@ $( () => {
           if (data2 && data2.id) waitFetchVisa(data2.id);
         });
       }).catch( e => {
-        if (e.message == 'CANCELED')
-          hideLoading();
-        else console.log(e);
+        hideLoading();  // such as 'CANCELED'
       });
     });
     
