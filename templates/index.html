@@ -874,7 +874,7 @@ $( () => {
         if (typeof data == 'string') {
           let err = '';
           if (data == 'UNLOCK_BY_OTHER')
-            err = '他人已开锁，您可以等待他人关锁后再试，或改用元护照登录后操作';
+            err = '他人已开锁，您需等他关锁后再试，或改用元护照登录来强制开锁';
           else if (data == 'AUTHORIZE_FAIL')
             err = '存取令牌无效，您需重新登录';
           else if (data == 'INVALID_SIGNATURE')
