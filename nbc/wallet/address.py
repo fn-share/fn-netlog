@@ -123,11 +123,6 @@ class Address(object):
     # public address
     self._address = util.key.publickey_to_address(self.publicKey(),self._vcn,ver=self._ver)
   
-  pub_key  = property(lambda s: s._pub_key)
-  priv_key = property(lambda s: s._priv_key)
-  vcn      = property(lambda s: s._vcn)         # vcn can be None
-  compressed = property(lambda s: s._compressed)
-  
   def address(self):
     return self._address
   

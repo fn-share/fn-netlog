@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<link href="/static/css/highlightjs.min.css" rel="stylesheet">
+<title>netlog</title>
+</head>
+<body>
+
+<div class="md-head-area">
+  <span></span><a target="_blank" href="/index.html">&nbsp;登录&nbsp;</a>
+</div>
+
+<div class="md-body-area"></div>
+
+<style>
+.md-head-area {
+  margin:0.25em 0;
+  padding: 0.5em 1em;
+  position: relative;
+  left: 6%;
+  width: 88%;
+  color:#666;
+  background-color: rgba(240,240,240,0.5);
+  border-radius:0.25rem;
+}
+.md-body-area {
+  margin: 0.5em 0;
+  padding: 1.5em 1em;
+  position: relative;
+  left: 6%;
+  width: 88%;
+  background-color: rgba(240,240,240,0.5);
+  border-radius: 0.5rem;
+}
+
+.md-body-area blockquote {
+  margin-left: 1rem;
+}
+.md-body-area code.inline-code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  white-space: break-spaces;
+  color: black;
+  background-color: rgba(175,184,193,0.2);
+  border-radius: 5px;
+}
+
+.my-hljs {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  background-color: #fff;
+  border-radius: 0.25rem;
+}
+.my-table td, .my-table th {
+  border: 1px solid #dfe2e5;
+  padding: 0.6em 1em;
+}
+.my-table > thead > tr {
+  background-color: #f4f0ec;
+}
+.my-table > tbody > tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+</style>
+
+<script src="/static/js/jquery-3.6.0.slim.min.js"></script>
+<script src="/static/js/highlight.min.js"></script>
+<script src="/static/js/markdown-it.min.js"></script>
+<script src="/static/js/markdown-it-attrs.min.js"></script>
+
+<script>
+const SITE_INFO = [ "{{info.login_session}}", {{info.modify_at}}, {{info.file_size}},
+  "{{info.content}}"
+];
+
+var _markdown = markdownit( {
+  html: true,
+  highlight: function(str,language) {
+    if (language && hljs.getLanguage(language)) {
+      try {
+        return '<pre class="my-hljs"><code>' + hljs.highlight(str,{language,ignoreIllegals:true}).value + '</code></pre>';
+      } catch (__) {}
+    }
+    return '<pre class="my-hljs"><code>' + _markdown.utils.escapeHtml(str) + '</code></pre>';
+  },
+  linkify: false,
+}).use(markdownItAttrs);
+
+_markdown.renderer.rules.table_open = function(tokens, idx, options, env, renderer) {
+  return '<table class="my-table">';
+};
+
+_markdown.renderer.rules.code_inline = function(tokens, idx, options, env, renderer) {
+  var token = tokens[idx];
+  return '<code' + renderer.renderAttrs(token) + ' class="inline-code">' +
+    _markdown.utils.escapeHtml(token.content) + '</code>';
+};
+
+function Utf8ToBase64(str) {
+  let s = '', arr = (new TextEncoder('utf-8')).encode(str);
+  for (let i=0, n=arr.length; i < n; i++) {
+    s += String.fromCharCode(arr[i]);
+  }
+  return btoa(s);
+}
+
+function Base64ToUtf8(base64) {
+  let arr = [], s = atob(base64);
+  for (let i=0, n=s.length; i < n; i++) {
+    arr.push(s.charCodeAt(i));
+  }
+  return (new TextDecoder('utf-8')).decode(Uint8Array.from(arr));
+}
+
+function showMarkdown(source) {
+  let ctx = '';
+  try {
+    ctx = _markdown.render(source)
+  }
+  catch (e) {
+    console.log(e);
+    alert('转译 markdown 出错');
+    return;
+  }
+  $('.md-body-area').html(ctx);
+}
+
+$( () => {
+  let modify_at = SITE_INFO[1];
+  if (modify_at == 0) {
+    $('.md-head-area > span').html('尚无内容发布，编辑请先');
+    $('.md-body-area').addClass('d-none');
+  }
+  else {
+    modify_at = (new Date(modify_at * 1000)).toLocaleString();
+    $('.md-head-area > span').html(`本文于 ${modify_at} 最后更新，若想编辑请先`);
+    showMarkdown(Base64ToUtf8(SITE_INFO[3]));
+  }
+});
+</script>
+
+</body>
+</html>

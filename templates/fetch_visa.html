@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>get visa card</title>
+</head>
+<body>
+
+<style>
+#auth-desc {
+  width: 8rem;
+  margin: 0;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ced4da;
+  
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #212529;
+  background-color: #fff;
+  background-clip: padding-box;
+  text-shadow: none;
+  
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 0.25rem;
+}
+
+#btn-save {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid transparent;
+  
+  cursor: pointer;
+  color: #fff;
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+  
+  user-select: none;
+  box-shadow: none;
+  border-radius: 0.25rem;
+}
+</style>
+
+<div id="save-block" style="display:none">
+  <p>拉取签证内容成功，您可以点击 “保存” 按钮把它存入本地数据库。为方便卡证维护，我们还建议您设置授权方标记（即，本签证由谁授权给你的）。</p>
+  <div><input type="text" id="auth-desc" placeholder="授权方">&nbsp; <button id="btn-save">保存</button></div>
+</div>
+
+<script>
+const VISA_ID  = "{{info.hash}}";
+
+function wait__(promise_obj, wait) {
+  let abort_fn = null;
+  let abortable_promise = Promise.race([ promise_obj,
+    new Promise( function(resolve, reject) {
+      abort_fn = function() { reject(new Error('TIMEOUT')) };
+    })
+  ]);
+  
+  setTimeout(()=>abort_fn(),wait);
+  return abortable_promise;
+}
+
+function getVisaCard(retry_num, visaId, callback, option) {
+  wait__(fetch('/login/visa/'+visaId,option),10000).then( res => {
+    if (res.status == 200)
+      return res.json();
+    else if (res.status == 404)
+      return 'NOT_FOUND';
+    if (callback) callback(null);
+    return null;
+  }, e => {  // e.message such like 'TIMEOUT'
+    if (retry_num)
+      getVisaCard(retry_num-1,callback,option);
+    else {
+      if (callback) callback(null);
+    }
+    return null;
+  }).then( data => {
+    if (data === null) return;
+    if (callback) callback(data);
+  });
+}
+
+var cardContent = '';
+
+function saveCardClick(ev) {
+  if (!cardContent) return;
+  
+  let comefrom = document.querySelector('#auth-desc').value.trim();
+  let nalHost = document.body.dataset.nal_domain || 'fn-share.github.io';
+  let url = 'https://' + nalHost + '/account/api/online/add_card?from=' + encodeURIComponent(comefrom) + '&card=' + cardContent;
+  
+  let frmNode = document.createElement('iframe');
+  frmNode.setAttribute('style','display:none');
+  frmNode.setAttribute('src',url);
+  document.body.appendChild(frmNode);
+  
+  // auto remove iframe node after 60 seconds
+  setTimeout(() => frmNode.remove(),60000);
+}
+
+window.addEventListener('load', function(ev) {
+  document.querySelector('#btn-save').addEventListener('click',saveCardClick,false);
+  
+  getVisaCard(2,VISA_ID, data => {
+    if (data === null) return alert('下载失败，请稍候再试');
+    if (data === 'NOT_FOUND') return alert('下载失败：链接已失效');
+    
+    if (data && data.content) {
+      cardContent = data.content;
+      document.querySelector('#save-block').style.display = 'block';
+    }
+  });
+},false);
+</script>
+
+</body>
+</html>

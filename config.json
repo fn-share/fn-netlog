@@ -1,0 +1,32 @@
+{
+  "nbc_platform_pubkey": "03d72fa51f87d007a9c98e858bb057cb4e280ee1c8d97516af96ec1c9e13d63c36",
+  "nbc_product_pubkey": "02ffef6766b43225e273a5da598037c1787b3b9c1043e99b27a780d06d0ae367bf",
+  "real_admin_pubkey": "028729396e71748b2cb56425335618218bc850a170da1adf59355278836b6b2624",
+  
+  "real_website": "https://real.fn-share.com",
+  
+  "app_admin_wif": "5JcWoESQLRJCy6kTbUr9EEHQB6Txn8Jm1VZsYwcfN5Bp1CXmcB8",
+  
+  "strategy": {
+    "strategy_ver": 1,
+    "session_type": 1,
+    "session_limit": 14,
+    "meta_pspt_expired": 12,
+    "roles": {
+       "manager": { "level":6, "desc":"管理员",
+         "actions":{"open_locker":"rsvd","close_locker":"auto","statistic":"auto","read_file":"auto","write_file":"auto","archive":"pass","authority":"pass"} },
+       "editor": { "level":5, "desc":"主编",
+         "actions":{"open_locker":"rsvd","close_locker":"auto","statistic":"auto","read_file":"auto","write_file":"auto","authority":"pass"} },
+       "reader": { "level":3, "desc":"读者", "actions":{"statistic":"auto","read_file":"auto","authority":"pass"} }
+    },
+    "actions": {
+      "statistic": 1,
+      "read_file": 2,
+      "authority": 2,
+      "close_locker": 3,
+      "open_locker": 4,
+      "write_file": 4,
+      "archive": 5
+    }
+  }
+}

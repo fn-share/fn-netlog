@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<link href="/static/css/highlightjs.min.css" rel="stylesheet">
+<title>Netlog</title>
+</head>
+
+<body>
+
+<div class="modal" tabindex="-1" id="login-modal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">登录</h5>
+        <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+<div class="accordion accordion-flush" id="accordion-login-area">
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="flush-heading-pspt">
+      <button class="accordion-button shadow-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse1" aria-expanded="false">持元护照按指定角色登录</button>
+    </h2>
+    <div id="flush-collapse1" class="accordion-collapse collapse collapsed" aria-labelledby="flush-heading-pspt" data-bs-parent="#accordion-login-area">
+      <div class="accordion-body m-3"><form onsubmit="return false" id="login-roles">
+      </form></div>
+    </div>
+  </div>
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="flush-heading-other">
+      <button class="accordion-button shadow-none collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#flush-collapse2" aria-expanded="false">持签证或绿卡登录</button>
+    </h2>
+    <div id="flush-collapse2" class="accordion-collapse collapse collapsed" aria-labelledby="flush-heading-other" data-bs-parent="#accordion-login-area">
+      <div class="accordion-body m-2 text-center" id="login-cards">
+        <div class="text-start">不支持！没找到签证或绿卡</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary shadow-none" id="btn-login">登录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" tabindex="-1" id="msgbox-modal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"></h5>
+      </div>
+      <div class="modal-body text-break"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary shadow-none" data-bs-dismiss="modal" id="btn-msgbox-ok">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" tabindex="-1" id="authority-modal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">当前角色转授权</h5>
+        <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+<div class="form-check" style="padding-left:1.75rem">
+  <input class="form-check-input shadow-none" type="checkbox" id="check-can-reauth" checked>
+  <label class="form-check-label" for="check-can-reauth">允许二次授权</label>
+</div>
+<select class="form-select mt-3 shadow-none" style="width:200px" id="select-visa-expired">
+  <option selected value="0">请选择签证有效期</option>
+  <option value="1440">一天</option>
+  <option value="4320">三天</option>
+  <option value="10080">一周</option>
+  <option value="20160">两周</option>
+  <option value="43200">一月</option>
+  <option value="131040">三月</option>
+  <option value="262080">半年</option>
+  <option value="525600">一年</option>
+  <option value="1051200">两年</option>
+  <option value="2628000">五年</option>
+  <option value="5256000">十年</option>
+  <option value="10512000">二十年</option>
+</select>
+<div class="form-floating mt-3">
+  <input type="text" class="form-control shadow-none" spellcheck="false" placeholder="rid1..." id="floating-auth-targ">
+  <label for="floating-auth-targ">授权对象的真身标识</label>
+</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary shadow-none" id="btn-create-visa"><span class="spinner-border spinner-border-sm d-none" role="status"></span> 生成签证</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" tabindex="-1" id="save-visa-modal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">授权结果</h5>
+      </div>
+      <div class="modal-body">
+<div>授权成功！如果授权给自己，请点击链接拉取签证并保存，<a target="_blank" id="visa-share-lnk">点此打开</a>。</div>
+<div class="mt-2">如果授权给他人，请将本链接或二维码截屏转发给目标用户，由目标用户拉取并保存。</div>
+<div class="input-group mt-2" style="width:340px">
+  <input type="text" class="form-control text-truncate shadow-none" id="visa-share-url" readonly>
+  <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-visa-copy-url">拷贝</button>
+</div>
+<div class="mb-3" id="visa-qr-code" style="padding:10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary shadow-none" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<ul class="nav nav-tabs mt-1">
+  <li class="nav-item dropdown" style="width:120px;">
+    <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button"><i data-feather="menu" style="width:20px; height:20px;"></i></button>
+    <ul class="dropdown-menu">
+      <li><button class="dropdown-item" id="menu-login">登录</button></li>
+      <li><button class="dropdown-item" id="menu-logout" disabled>登出</button></li>
+      <li><button class="dropdown-item" id="menu-login-id" disabled>登录者身份</button></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><button class="dropdown-item" id="menu-publish" disabled>发布 Netlog</button></li>
+      <li><button class="dropdown-item" id="menu-authority" disabled>授权生成签证</button></li>
+    </ul>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#netlog-tab-summary" type="button" role="tab">摘要</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#netlog-tab-editing" type="button" role="tab">编辑</button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#netlog-tab-preview" type="button" role="tab" id="btn-preview">预览</button>
+  </li>
+</ul>
+
+<div class="tab-content" id="netlog-tab-content">
+
+<div class="tab-pane fade show active" id="netlog-tab-summary" role="tabpanel">
+  <div class="mt-4 d-none" id="netlog-summary">
+    <h5>Netlog 摘要信息：</h5>
+    <div class="mt-2" id="md-summary"></div>
+  </div>
+  <div class="mt-5 d-none" id="netlog-lnkaddr">
+    <h5>Netlog 正文链接：</h5>
+    <div class="input-group mt-2" style="width:340px">
+      <input type="text" class="form-control text-truncate shadow-none" id="md-share-url" readonly>
+      <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-copy-url">拷贝</button>
+    </div>
+    <div class="mt-2"><a target="_blank" id="md-share-lnk">点此打开链接</a>，或者扫描如下二维码：</div>
+    <div class="mb-3" id="md-qr-code" style="padding:10px;"></div>
+  </div>
+</div>
+
+<div class="tab-pane fade" id="netlog-tab-editing" role="tabpanel">
+  <div class="file-tools mt-2"><i class="ms-3 disabled" data-feather="lock"></i><i class="ms-3 d-none disabled" data-feather="unlock"></i><i class="ms-1 disabled" data-feather="save"></i></div>
+  <textarea id="md-txt-editor" class="p-2 mt-2 rounded-3" style="border-color:#eee; outline-width:0; width:100%; height:calc(100vh - 6.5rem); min-height:60px; resize:none;" readonly></textarea>
+</div>
+
+<div class="tab-pane fade" id="netlog-tab-preview" role="tabpanel">
+  <div id="md-txt-viewer" class="mt-2 p-3 rounded-3" style="overflow-y:auto; background-color: rgba(240,240,240,0.5); width:100%; height:calc(100vh - 4.5rem);" readonly></div>
+</div>
+
+</div>  <!--  end of .tab-content -->
+</div>  <!--  end of .container -->
+
+<style>
+#md-txt-viewer blockquote {
+  margin-left: 1rem;
+}
+#md-txt-view code.inline-code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  white-space: break-spaces;
+  color: black;
+  background-color: rgba(175,184,193,0.2);
+  border-radius: 5px;
+}
+
+.my-hljs {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  background-color: #fff;
+  border-radius: 0.25rem;
+}
+.my-table td, .my-table th {
+  border: 1px solid #dfe2e5;
+  padding: 0.6em 1em;
+}
+.my-table > thead > tr {
+  background-color: #f4f0ec;
+}
+.my-table > tbody > tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+
+#md-qr-code, #visa-qr-code {
+  width: 200px;
+  height: 200px;
+}
+#md-qr-code img, #visa-qr-code img {
+  width: 100%;
+  height: 100%;
+}
+
+.file-tools svg.feather {
+  color: #555;
+}
+.file-tools svg.feather.disabled {
+  color: #ccc;
+}
+.file-tools svg.feather:hover:not(.disabled) {
+  color: blue;
+  background-color: #f8f9fa;
+}
+svg.feather {
+  outline-width: 0;
+}
+
+#md-txt-editor[readonly] {
+  background-color: #e9ecef;
+}
+</style>
+
+<pre style="display:none" id="hidden-strategy">{{info.app_strategy}}</pre>
+
+<script src="/static/js/jquery-3.6.0.slim.min.js"></script>
+<script src="/static/js/highlight.min.js"></script>
+<script src="/static/js/popper.min.js"></script>
+<script src="/static/js/bootstrap.min.js"></script>
+<script src="/static/js/markdown-it.min.js"></script>
+<script src="/static/js/markdown-it-attrs.min.js"></script>
+<script src="/static/js/qrcode.min.js"></script>
+
+<script src="/static/js/feather.min.js"></script>
+<script>feather.replace()</script>
+
+<script src="/static/js/nbc_base-0.1.min.js"></script>
+<script src="/static/js/nal-0.1.js"></script>
+
+<script>
+const CreateHash = require('create-hash');
+const Buffer = require('safe-buffer').Buffer;
+const base36 = require('base-x')('0123456789abcdefghijklmnopqrstuvwxyz');
+
+const REAL_WEBSITE = '{{info.real_website}}';
+const APP_ADMIN_PUBKEY = '{{info.app_admin_pubkey}}';
+
+const STRATEGY_INFO = NAL.strategy(JSON.parse($('#hidden-strategy').text()));
+const STRATEGY = STRATEGY_INFO[0];
+const DEFAULT_PERIOD  = STRATEGY_INFO[1]; // sessType=1, 15m
+const DEFAULT_REFRESH = STRATEGY_INFO[2]; // sessType=1, 90m
+const REFRESH_LIMIT   = STRATEGY_INFO[3];
+
+const colonChar = Buffer.from(':');
+
+const _loginModal  = new bootstrap.Modal($('#login-modal'),{backdrop:'static',keyboard:true});
+const _msgboxModal = new bootstrap.Modal($('#msgbox-modal'),{backdrop:'static',keyboard:true});
+const _authorityModal = new bootstrap.Modal($('#authority-modal'),{backdrop:'static',keyboard:true});
+const _saveVisaModal = new bootstrap.Modal($('#save-visa-modal'),{backdrop:'static',keyboard:true});
+
+function htmlEscape(text) { 
+  return text.replace(/[<>"&]/g, function(match, pos, originalText) { // "
+    if (match == '<')
+      return '&lt;';
+    else if (match == '>')
+      return '&gt;';
+    else if (match == '&')
+      return '&amp;';
+    else if (match == '"')
+      return '&quot;';
+  });
+}
+
+function generateRand(num) {
+  let ret = Buffer.alloc(num,0);
+  for (let i=0; i < num; i++) {
+    ret[i] = Math.floor(Math.random() * 256);  // 0 ~ 255
+  }
+  return ret;
+}
+
+const _available_chr = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';  // total 62 char
+
+function getRandomStr(size) {
+  var ret = '';
+  for (var i=0; i < size; i++) {
+    ret += _available_chr[Math.floor(Math.random() * 62)]
+  }
+  return ret;
+}
+
+function wait__(promise_obj, wait) {
+  let abort_fn = null;
+  let abortable_promise = Promise.race([ promise_obj,
+    new Promise( function(resolve, reject) {
+      abort_fn = function() { reject(new Error('TIMEOUT')) };
+    })
+  ]);
+  
+  setTimeout(()=>abort_fn(),wait);
+  return abortable_promise;
+}
+
+function url_fetch(url, callback, options, timeout) {
+  wait__(fetch(url,options),timeout || 30000).then( res => {
+    if (res.status == 200)
+      return res.json();
+    else return null;   // ignore other res.status
+  }, e => null ).then( data => {
+    if (callback) callback(data);  // data can be null
+  });
+}
+
+function ripemdHash(buf) {
+  let ha = CreateHash('sha256').update(buf).digest();
+  return CreateHash('ripemd160').update(ha).digest();
+}
+
+function showMsgBox(sTitle, sHtml) {
+  $('#msgbox-modal .modal-title').html(htmlEscape(sTitle));
+  $('#msgbox-modal .modal-body').html(sHtml);
+  _msgboxModal.show();
+}
+
+NAL.afterLogout = function() {
+  _loginModal.show();  // relogin
+};
+
+function formatSeconds(n) {
+  let tm = new Date(n*1000);
+  let s = tm.getFullYear() + '';
+  return s.slice(-2) + '/' + (tm.getMonth()+1) + '/' + tm.getDate() + ' ' + tm.getHours() + ':' + tm.getMinutes();
+}
+
+function isValidRidFormat(s) {
+  try {
+    if (typeof s == 'string' && s.length >= 24 && s.slice(0,4) == 'rid1') {
+      let s2 = base36.decode(s.slice(4));
+      if (s2.length != 24) return false;
+      
+      let payload = Buffer.concat([Buffer.from('rid1'),s2.slice(0,20)]);
+      let check4 = CreateHash('sha256').update(payload).digest();
+      check4 = CreateHash('sha256').update(check4).digest().slice(0,4).toString('hex'); // double hash256
+      if (check4 == s2.slice(20).toString('hex'))
+        return true;
+    }
+  }
+  catch(e) { }
+  return false;
+}
+
+function editingStat(retry_num, callback, option) {
+  wait__(fetch('/stat',option),10000).then( res => {
+    if (res.status == 200)
+      return res.json();
+    if (callback) callback(null);
+    return null;
+  }, e => {  // e.message such like 'TIMEOUT'
+    if (retry_num)
+      editingStat(retry_num-1,callback, option);
+    else {
+      if (callback) callback(null);
+    }
+    return null;
+  }).then( data => {
+    if (data === null) return;
+    if (callback) callback(data);
+  });
+}
+
+function editingFetch(retry_num, callback, option) {
+  wait__(fetch('/editing',option),10000).then( res => {
+    if (res.status == 200)
+      return res.text();
+    if (callback) callback(null);
+    return null;
+  }, e => {  // e.message such like 'TIMEOUT'
+    if (retry_num)
+      editingFetch(retry_num-1,callback, option);
+    else {
+      if (callback) callback(null);
+    }
+    return null;
+  }).then( data => {
+    if (data === null) return;
+    if (callback) callback(data);
+  });
+}
+
+//----
+
+var _markdown = markdownit( {
+  html: true,
+  highlight: function(str,language) {
+    if (language && hljs.getLanguage(language)) {
+      try {
+        return '<pre class="my-hljs"><code>' + hljs.highlight(str,{language,ignoreIllegals:true}).value + '</code></pre>';
+      } catch (__) {}
+    }
+    return '<pre class="my-hljs"><code>' + _markdown.utils.escapeHtml(str) + '</code></pre>';
+  },
+  linkify: false,
+}).use(markdownItAttrs);
+
+_markdown.renderer.rules.table_open = function(tokens, idx, options, env, renderer) {
+  return '<table class="my-table">';
+};
+
+_markdown.renderer.rules.code_inline = function(tokens, idx, options, env, renderer) {
+  var token = tokens[idx];
+  return '<code' + renderer.renderAttrs(token) + ' class="inline-code">' +
+    _markdown.utils.escapeHtml(token.content) + '</code>';
+};
+
+let md_qr_code = new QRCode('md-qr-code');
+let visa_qr_code = new QRCode('visa-qr-code');
+
+let markdown_info = {};
+
+let md_last_modified = 0;
+let md_last_transfer = 0;
+let md_last_post_ctx = 0;
+
+function updateLoginMenu(hasLogin) {
+  let isManager = hasLogin && NAL.role() == 'manager';
+  $('#menu-login').attr('disabled',hasLogin);
+  $('#menu-logout').attr('disabled',!hasLogin);
+  $('#menu-login-id').attr('disabled',!hasLogin);
+  $('#menu-publish').attr('disabled',!isManager);
+  
+  let canAuth = false;
+  if (hasLogin) {
+    let sdat = NAL.sessData();
+    if (sdat.length >= 1 && (sdat[0]&0x7f) == 127)
+      canAuth = true;
+  }
+  $('#menu-authority').attr('disabled',!canAuth);
+}
+
+function renewToolIcons(modified) {
+  let inEditing = markdown_info.opened;
+  let tools = $('.file-tools svg.feather');
+  tools.filter('.feather-lock').toggleClass('d-none',inEditing).removeClass('disabled');
+  tools.filter('.feather-unlock').toggleClass('d-none',!inEditing).removeClass('disabled');
+  tools.filter('.feather-save').toggleClass('d-none',!inEditing).toggleClass('disabled',!(inEditing && modified));
+}
+
+function whenSuccLogout() {  // overwrite old one
+  updateLoginMenu(false);
+  
+  let tools = $('.file-tools svg.feather');
+  tools.filter('.feather-lock').removeClass('d-none').addClass('disabled');
+  tools.filter('.feather-unlock').addClass('d-none disabled');
+  tools.filter('.feather-save').removeClass('d-none').addClass('disabled');
+  
+  md_last_post_ctx = md_last_modified = md_last_transfer = 0;
+  $('#md-txt-editor').val('').attr('readonly',true);
+  $('#md-txt-viewer').html('');
+}
+
+function renewContentShow(onlySummary) {
+  editingStat(2, data => {
+    if (!data || !data.desc) return alert('查询编辑状态失败，请稍候刷新页面再试');
+    
+    // step 1: save global state to markdown_info
+    markdown_info = {path:data.path,opened:data.opened};
+    
+    // step 2: setup summary page
+    $('#md-summary').html(_markdown.render(data.desc));
+    
+    let url = location.protocol + '//' + location.host + data.path;
+    $('#md-share-url').val(url);
+    $('#md-share-lnk').attr('href',url);
+    md_qr_code.makeCode(url);
+    $('#netlog-summary, #netlog-lnkaddr').removeClass('d-none');
+    
+    if (onlySummary) return;
+    
+    // step 3: setup editor page
+    let isReader = NAL.role() == 'reader';
+    $('.file-tools').toggleClass('d-none',isReader);
+    $('#md-txt-editor').css('height',isReader?'calc(100vh - 4.5rem)':'calc(100vh - 6.5rem)');
+    if (!isReader) renewToolIcons(false);
+    
+    // step 4: try setup markdown content
+    if (isReader)
+      tryPullMarkdown(false);
+    else {  // login by editor or manager
+      if (markdown_info.opened)  // already opened for editing
+        tryPullMarkdown(true);
+      else {
+        md_last_post_ctx = md_last_modified = md_last_transfer = 0;
+        $('#md-txt-editor').val('').attr('readonly',true);
+        $('#md-txt-viewer').html('');
+      }
+    }
+  }, {headers:{'X-Authority':NAL.token()}});
+  
+  function tryPullMarkdown(setWritable) {
+    editingFetch(2, data => {
+      if (typeof data != 'string')
+        return alert('拉取编辑内容失败，请稍候再试');
+      
+      if (setWritable)
+        $('#md-txt-editor').attr('readonly',false);
+      else $('#md-txt-editor').attr('readonly',true);
+      
+      $('#md-txt-editor').val(data);
+      $('#md-txt-viewer').html(_markdown.render(data));
+      md_last_post_ctx = md_last_modified = md_last_transfer = Math.floor((new Date()).valueOf() / 1000);
+    }, {method:'GET',headers:{'X-Authority':NAL.token()}} ); 
+  }
+}
+
+function whenSuccLogin() {
+  updateLoginMenu(true);
+  renewContentShow();
+}
+
+//----
+
+let collapseByPspt = new bootstrap.Collapse($('#flush-collapse1'),{toggle:false});
+let collapseByOther = new bootstrap.Collapse($('#flush-collapse2'),{toggle:false});
+
+function tempDisableBtn(targ) {
+  if (!targ) return;
+  let node = $(targ);
+  node.attr('disabled',true); // temporary disable button to avoid second-click
+  setTimeout( () => node.attr('disabled',false), 2000);
+}
+
+function waitFetchVisa(cardId) {
+  let url = location.protocol + '//' + location.host + '/visa/' + cardId;
+  $('#visa-share-url').val(url);
+  $('#visa-share-lnk').attr('href',url);
+  visa_qr_code.makeCode(url);
+  
+  setTimeout(() => _saveVisaModal.show(),300);
+}
+
+function setupCardHtml(idx, selectedIdx, card) {
+  let borderCls = idx == selectedIdx? 'border-primary ': '';
+  let roleDesc = htmlEscape(card[3]);
+  let where = htmlEscape('来自 ' + card[4]);
+  let tmStr = formatSeconds(card[0]);
+  let flag = card[5] === 'gncd'? '绿卡': '签证';
+  return `<div data-idx="${idx}" class="${borderCls}card d-inline-block m-1 text-start" style="width:12rem;"><div class="card-body p-2"><h5 class="card-title">${roleDesc}</h5><h6 class="card-subtitle mb-2 fst-italic">(${flag})</h6><p class="card-text"><span class="text-decoration-underline">${where}</span><br>截止 ${tmStr}</p></div></div>`;
+}
+
+function renewLoginCards(cards) {
+  let sHtml = '';
+  let targNode = $('#login-cards');
+  
+  if (cards.length) {
+    // step 1: scan cards and sort by expired time
+    let b = [];
+    cards.forEach( card => {
+      if (card.flag != 'visa') return;
+      
+      let role = card.role;
+      let role2 = STRATEGY.roles[role]?.desc || role;
+      let comeFrom = card.comefrom || 'myself';
+      b.push([Math.abs(card.expired),card.flag,role,role2,comeFrom,card.child,card.pubkey,card.content]);
+    });
+    b.sort( (a,b) => a[0] - b[0] );  // sort by expired time
+    b.reverse();  // the most recent list at first which would help auto selected
+    
+    // cards:[[expired,flag,role,roleDesc,comeFrom,child,cardPubkey,content]...]
+    // can be: flag='visa' child='gncd:pubkey' content='<gncd_content>'
+    targNode[0].cards = b;
+    
+    // step 2: list card with html
+    b.forEach( (item,idx) => {
+      sHtml += setupCardHtml(idx,0,item);
+    });
+  }
+  else targNode[0].cards = [];
+  
+  targNode.html(sHtml);
+}
+
+function initLoginCfg(lastRole, cards) {
+  // step 1: scan roles from STRATEGY
+  let b = [];
+  for (let k in STRATEGY.roles) {
+    let v = STRATEGY.roles[k];
+    b.push({...v,name:k});
+  }
+  b.sort( (a,b) => b.level - a.level );
+  
+  if (!lastRole) lastRole = 'manager';
+  if (!STRATEGY.roles[lastRole]) lastRole = b[0].name;
+  
+  // step 2: setup passport login roles
+  let s = '';
+  b.forEach( (item,idx) => {
+    let beChecked = item.name === lastRole? 'checked': '';
+    s += `<input class="form-check-input" type="radio" name="login_by" value="${item.name}" id="login-by-${item.name}" ${beChecked}><label class="form-check-label" for="login-by-${item.name}">&nbsp;${item.desc} &nbsp;&nbsp; </label>`;
+  });
+  $('#login-roles').html(s);
+  
+  // step 3: setup card selector
+  renewLoginCards(cards);
+  
+  // step 4: config default show by passport or cards
+  if (localStorage.getItem('last_login_type') === 'GREEN_CARD')
+    collapseByOther.show();
+  else collapseByPspt.show();
+}
+
+$( () => {
+  NAL.waitReady(30).then( verInfo => {
+    if (typeof verInfo == 'string') {  // get ver_info failed
+      if (verInfo == 'none')
+        alert('service worker 未安装，本站将无法正常提供功能');
+      else {
+        console.log('SW state: ' + verInfo);
+        alert('service worker 已安装但未正常激活，请重启浏览器，或关机重启再试');
+      }
+    }
+    else {
+      if (verInfo.acc_type === 'restorable') {
+        console.log('BIP account is ready.');
+        whenNalReady();
+      }
+      else alert('service worker 中的账号未就绪，本站将无法正常提供功能');
+    }
+  });
+  
+  function whenNalReady() {
+    // step 1: set SW magic
+    let now = Math.floor((new Date()).valueOf() / 1000);
+    let tm = parseInt(localStorage.getItem('sw_magic_time') || 0);
+    let newMagic = 0, oldMagic = parseInt(localStorage.getItem('sw_magic_last') || 0);
+    if ((now-tm) < DEFAULT_REFRESH && oldMagic) // reuse session when before one refresh segment
+      newMagic = oldMagic;
+    else {
+      while (!newMagic) {  // ensure newMagic != 0
+        newMagic = parseInt(generateRand(6).toString('hex'),16);
+      }
+    }
+    
+    NAL.swMagic(newMagic, magic => {
+      if (typeof magic != 'number')
+        return alert('申请 service worker magic 出错');
+      
+      // save sid and time to localStorage, so other same site page can reuse it
+      localStorage.setItem('sw_magic_last',magic+'');
+      localStorage.setItem('sw_magic_time',now+'');
+      
+      if (NAL.strategyVer() !== 1)     // version mismatch
+        NAL.call_('save_strategy',[NAL.swHost(),magic,STRATEGY]);
+      
+      // step 2: list cards
+      NAL.call('list_cards',[NAL.swHost(),magic]).then( res => {
+        let cards = res instanceof Array? res: [];
+        
+        // step 3: init GUI
+        let role = localStorage.getItem('login_role');
+        initLoginCfg(role,cards);
+        
+        let tm = parseInt(localStorage.getItem('last_login') || 0);
+        let nonce1 = localStorage.getItem('client_nonce');
+        let nonce2 = localStorage.getItem('server_nonce');
+        let sessData = localStorage.getItem('session_data') || '';
+        sessData = Buffer.from(sessData,'hex');
+        if (tm && (now-tm) < DEFAULT_REFRESH*REFRESH_LIMIT && nonce1 && nonce2 && role) {  // already login
+          NAL.checkStart(role,nonce1,nonce2,sessData,tm,now,true);
+          whenSuccLogin();
+        }
+        else _loginModal.show();  // need re-login
+      });
+    });
+  }
+  
+  $('#login-cards').on('click', ev => {
+    let targ = $(ev.target);
+    let cardNode = targ.parents('.card');
+    if (cardNode.length == 0) return;
+    
+    let currIdx = cardNode[0].dataset.idx;
+    $('#login-cards .card').each( (idx,node) => {
+      $(node).toggleClass('border-primary',node.dataset.idx === currIdx);
+    });
+  });
+  
+  $('#btn-login').on('click', ev => {
+    tempDisableBtn(ev.target);
+    
+    if ($('#flush-collapse1').hasClass('show')) {  // login by passport
+      let loginRole = $('#login-roles input[name="login_by"]:checked').val();
+      if (!loginRole) return;
+      
+      NAL.getPassport(true).then( res => {
+        if (typeof res == 'string')
+          alert('获取护照出错:' + res);
+        else {  // {is_meta,state,content,realm,child,pubkey,expired}
+          let child = (res.child & 0x7fffffff) + 0x80000000; // is_meta = true
+          doLogin(loginRole,child+'',res.content);
+        }
+      });
+    }
+    
+    else {  // login by auth card
+      let loginCards = $('#login-cards');
+      let cardNode = loginCards.find('.card.border-primary');
+      if (!cardNode.length) return;
+      
+      let cards = loginCards[0].cards;
+      let currIdx = parseInt(cardNode[0].dataset.idx);
+      let card = cards[currIdx];  // visa:[expired,flag,role,roleDesc,comeFrom,child,pubkey,hashId,referrer,hexContent]
+      
+      if (card[1] == 'visa') {
+        let visaRole = card[2], visaChild = card[5];
+        if (visaChild === 'gncd')
+          return doLogin(visaRole,'gncd:'+card[6],card[7]);
+        
+        NAL.call('get_gncd',[NAL.swHost(),NAL.swMagic(),visaRole,visaChild,APP_ADMIN_PUBKEY],30000).then( res => {
+          if (!res || !res.card) {
+            if (res && typeof res == 'string')
+              alert('请求绿卡出错:' + res);
+            else alert('NAL 调用出错');
+            return;
+          }
+          
+          card[0] = res.expired;
+          card[5] = 'gncd';
+          card[6] = res.targ_pubkey;
+          card[7] = res.card;
+          $(setupCardHtml(currIdx,currIdx,card)).insertBefore(cardNode);
+          cardNode.remove();
+          
+          doLogin(visaRole,'gncd:'+card[6],card[7]);
+        });
+      }
+    }
+    
+    function doLogin(role, child, hexContent) {
+      let tm = Math.floor((new Date()).valueOf() / 1000);
+      let tmSeg = Math.floor(tm / DEFAULT_REFRESH);
+      let nonce = getRandomStr(32);
+      let nonceCrc3 = CreateHash('sha256').update(Buffer.from(role+':'+nonce+':'+tmSeg)).digest().slice(0,3);
+      let ha = CreateHash('sha256').update(Buffer.from(hexContent,'hex')).digest();
+      let beSign = Buffer.concat([ha,colonChar,nonceCrc3,Buffer.from(':'+tm)]);
+      
+      NAL.dialog('sign',[role+'+login',child,beSign.toString('hex')]).then( res => {
+        if (!(res?.signature)) return;  // ignore, unexpected
+        if (Math.floor((new Date()).valueOf()/1000) - tm > 180)
+          return alert('签名超时');  // more than 3 minutes
+        
+        let loginType = child.slice(0,5) == 'gncd:'? 'GREEN_CARD': 'META_PSPT';
+        let body = {role,pubkey:res.pubkey,card:hexContent,nonce_crc:nonceCrc3.toString('hex'),time:tm,signature:res.signature};
+        url_fetch('/login/nonce', data => {
+          if (!data || !data.nonce) return alert('登录失败，请稍候再试');
+          
+          let sessData = data.session_data || '';
+          
+          localStorage.setItem('client_nonce',nonce);
+          localStorage.setItem('server_nonce',data.nonce); // hex string
+          localStorage.setItem('session_data',sessData);   // hex string
+          localStorage.setItem('login_role',role);
+          localStorage.setItem('last_login',tm+'');
+          localStorage.setItem('last_login_type',loginType);
+          
+          sessData = Buffer.from(sessData,'hex');
+          NAL.checkStart(role,nonce,data.nonce,sessData,tm,tm,false);
+          
+          _loginModal.hide();
+          whenSuccLogin();
+        }, {method:'POST', body:JSON.stringify(body)});
+      }).catch(e => {
+        if (e.message == 'CANCELED') console.log('login canceled');
+      });
+    }
+  });
+  
+  $('#menu-login').on('click', ev => {
+    let hasLogin = !!NAL.token();
+    updateLoginMenu(hasLogin);
+    if (!hasLogin) {
+      NAL.call('list_cards',[NAL.swHost(),NAL.swMagic()]).then( res => {
+        let cards = res instanceof Array? res: [];
+        let role = localStorage.getItem('login_role');
+        initLoginCfg(role,cards);
+        _loginModal.show();
+      });
+    }
+  });
+  
+  $('#menu-logout').on('click', ev => {
+    let hasLogin = !!NAL.token();
+    if (hasLogin)
+      NAL.logout();
+    whenSuccLogout();
+  });
+  
+  $('#menu-login-id').on('click', ev => {
+    if (!NAL.token()) return;
+    
+    // we need fetch login info from SW since current page maybe reloaded
+    NAL.call('login_info',[NAL.swHost(),NAL.swMagic()]).then( res => {
+      if (res && res.role) {
+        let desc = '';
+        if (res.flag == 'gncd')
+          desc = '隐身份';
+        else if (res.flag == 'meta')
+          desc = '元身份（序号为' + res.child + '）';
+        // else, login user can not be 'visa' or none-meta-passport
+        
+        if (desc) {
+          let roleDesc = STRATEGY.roles[res.role]?.desc || res.role;
+          let fp = parseInt(ripemdHash(Buffer.from(res.pubkey,'hex')).slice(0,4).toString('hex'),16);
+          let msg = `登录类别：${desc}<br>登录角色：${roleDesc}<br>账号指纹：${fp}<br>账号公钥：${res.pubkey}`;
+          
+          setTimeout( (s) => {
+            showMsgBox('登录者身份',s);
+          }, 100, msg);
+        }
+      }
+    });
+  });
+  
+  $('#btn-copy-url').on('click', ev => {
+    let node = $('#md-share-url');
+    let currValue = node.val();
+    if (currValue) {
+      node.select();
+      document.execCommand('copy');
+      node.val('链接已拷贝');
+      setTimeout(() => node.val(currValue),3000);
+    }
+  });
+  
+  $('#btn-preview').on('click', ev => {
+    if (md_last_transfer < md_last_modified) {
+      $('#md-txt-viewer').html(_markdown.render($('#md-txt-editor').val()));
+      md_last_transfer = Math.floor((new Date()).valueOf() / 1000);
+    }
+  });
+  
+  $('.file-tools > .feather-lock').on('click', ev => {  // current is locked, change to unlock
+    if ($(ev.target).hasClass('disabled')) return;
+    if (NAL.role() == 'reader') return; // ignore when by reader
+    if (markdown_info.opened) return;   // ignore when already opened
+    
+    let tm = Math.floor((new Date()).valueOf() / 1000);
+    NAL.actionSign('open_locker',Buffer.from(tm+'').toString('hex')).then(res => {
+      if (!res || !res.signature) return alert('请求签名失败');
+      
+      let body = {time:tm,action:'open_locker',signature:res.signature,pubkey:res.pubkey};
+      wait__(fetch('/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+        if (res.status == 200)
+          return res.json();
+        else if (res.status == 401 || res.status == 400)
+          return res.text();
+        else return 'UNKNOWN_ERROR';
+      }, e => (console.log(e),'NETWORK_ERROR')).then( data => {
+        if (typeof data == 'string') {
+          let err = '';
+          if (data == 'UNLOCK_BY_OTHER')
+            err = '他人已开锁，您可以等待他人关锁后再试，或改用元护照登录后操作';
+          else if (data == 'AUTHORIZE_FAIL')
+            err = '存取令牌无效，您需重新登录';
+          else if (data == 'INVALID_SIGNATURE')
+            err = '验证签名不通过';
+          else if (data == 'INVALID_ACCOUNT')
+            err = '账号不匹配';
+          else if (data == 'INVALID_TIME')
+            err = '机器时间不匹配';
+          else if (data == 'NETWORK_ERROR')
+            err = '通信失败，请稍候重试';
+          else err = '锁操作失败:' + data;
+          return alert(err);
+        }
+        
+        if (data?.result == 'OK') {
+          renewContentShow();
+        }
+        // else, just ignore
+      });
+    }).catch(e => null);  // catch 'CANCELED' exception
+  });
+  
+  $('.file-tools > .feather-unlock').on('click', ev => { // current is unlock, change to lock
+    if ($(ev.target).hasClass('disabled')) return;
+    if (NAL.role() == 'reader' || !markdown_info.opened) return;
+    
+    if (md_last_modified > md_last_post_ctx && !confirm('内容已改，要放弃保存吗？'))
+      return;
+    
+    let tm = Math.floor((new Date()).valueOf() / 1000);
+    NAL.actionSign('close_locker',Buffer.from(tm+'').toString('hex')).then(res => {
+      if (!res || !res.signature) return alert('请求签名失败');
+      
+      let body = {time:tm,action:'close_locker',signature:res.signature,pubkey:res.pubkey};
+      wait__(fetch('/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+        if (res.status == 200)
+          return res.json();
+        else if (res.status == 401 || res.status == 400)
+          return res.text();
+        else return 'UNKNOWN_ERROR';
+      }, e => (console.log(e),'NETWORK_ERROR')).then( data => {
+        if (typeof data == 'string') {
+          let err = '';
+          if (data == 'UNLOCK_BY_OTHER')
+            err = '他人已开锁，您可以等待他人关锁后再试，或改用元护照登录后操作';
+          else if (data == 'AUTHORIZE_FAIL')
+            err = '存取令牌无效，您需重新登录';
+          else if (data == 'INVALID_SIGNATURE')
+            err = '验证签名不通过';
+          else if (data == 'INVALID_ACCOUNT')
+            err = '账号不匹配';
+          else if (data == 'INVALID_TIME')
+            err = '机器时间不匹配';
+          else if (data == 'NETWORK_ERROR')
+            err = '通信失败，请稍候重试';
+          else err = '锁操作失败:' + data;
+          return alert(err);
+        }
+        
+        if (data?.result == 'OK') {
+          renewContentShow();
+        }
+        // else, just ignore
+      });
+    }).catch(e => null);  // catch 'CANCELED' exception
+  });
+  
+  $('.file-tools > .feather-save').on('click', ev => {
+    if ($(ev.target).hasClass('disabled')) return;
+    if (NAL.role() == 'reader' || !markdown_info.opened) return; // ignore when: by reader or already opened
+    
+    if (md_last_modified <= md_last_post_ctx)
+      return alert('内容未修改，不必提交保存');
+    
+    let body = '{"content":"' + Buffer.from($('#md-txt-editor').val()).toString('base64') + '"}';
+    wait__(fetch('/editing',{method:'POST',body,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      if (res.status == 200)
+        return res.json();
+      else if (res.status == 401 || res.status == 400)
+        return res.text();
+      else return 'UNKNOWN_ERROR';
+    }, e => (console.log(e),'NETWORK_ERROR') ).then( data => {
+      if (data?.result === 'OK') {
+        md_last_post_ctx = Math.floor((new Date()).valueOf() / 1000);
+        renewToolIcons(false);
+      }
+      else {
+        if (typeof data == 'string') {
+          if (data == 'UNLOCK_BY_OTHER')
+            alert('写权限已被 manager 剥夺，您应先备份刚修改的文本，然后等 manager 结束操作后，才可重新登录获得获得操作权');
+          else alert('提交失败：' + data);
+        }
+      }
+    });
+  });
+  
+  $('#md-txt-editor').on('change', ev => {
+    md_last_modified = Math.floor((new Date()).valueOf() / 1000);
+    renewToolIcons(true);
+  });
+  
+  $('#menu-publish').on('click', ev => {
+    if (NAL.role() != 'manager') return;
+    
+    let tm = Math.floor((new Date()).valueOf() / 1000);
+    NAL.actionSign('archive',Buffer.from(tm+'').toString('hex')).then(res => {
+      if (!res || !res.signature) return alert('请求签名失败');
+      
+      let body = {time:tm,signature:res.signature,pubkey:res.pubkey};
+      wait__(fetch('/publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+        if (res.status == 200)
+          return res.json();
+        else if (res.status == 401 || res.status == 400)
+          return res.text();
+        else return 'UNKNOWN_ERROR';
+      }, e => (console.log(e),'NETWORK_ERROR')).then( data => {
+        if (typeof data == 'string') {
+          let err = '';
+          if (data == 'AUTHORIZE_FAIL')
+            err = '存取令牌无效，您需重新登录';
+          else if (data == 'INVALID_SIGNATURE')
+            err = '验证签名不通过';
+          else if (data == 'INVALID_ACCOUNT')
+            err = '账号不匹配';
+          else if (data == 'INVALID_TIME')
+            err = '机器时间不匹配';
+          else if (data == 'NETWORK_ERROR')
+            err = '通信失败，请稍候重试';
+          else if (data == 'NO_CHANGE')
+            err = 'Netlog 最近未修改，本操作忽略';
+          else err = '锁操作失败:' + data;
+          return alert(err);
+        }
+        
+        if (data?.result == 'OK') {
+          setTimeout(() => {
+            alert('发布成功');
+            renewContentShow(true);
+          }, 300);
+        }
+      });
+    }).catch(e => null);  // catch 'CANCELED' exception
+  });
+  
+  $('#menu-authority').on('click', ev => {
+    if ($(ev.target).hasClass('disabled')) return;
+    let sdat = NAL.sessData();
+    if (!sdat.length || (sdat[0]&0x7f) != 127) return; // not allowed
+    
+    _authorityModal.show();
+  });
+  
+  $('#btn-create-visa').on('click', ev => {
+    let token = NAL.token();
+    if (!token) return;
+    
+    let expired_m = parseInt($('#select-visa-expired').val());
+    if (expired_m == 0) return alert('请选择待生成签证的有效期');
+    
+    let authTarg = $('#floating-auth-targ').val().trim();
+    if (!isValidRidFormat(authTarg)) return alert('待授权的真身标识无效');
+    
+    $('#btn-create-visa .spinner-border').removeClass('d-none');
+    
+    let canReauth =$('#check-can-reauth').prop('checked');
+    let url = REAL_WEBSITE + '/cards/pspt/' + authTarg;
+    wait__(fetch(url,{method:'GET',referrerPolicy:'no-referrer'}),30000).then( res => {
+      if (res.status == 200)
+        return res.json();
+      else if (res.status == 401 || res.status == 400)
+        return res.text();
+      else return 'UNKNOWN_ERROR';
+    }, e => 'NETWORK_ERROR').then( data => {
+      if (typeof data == 'string') {
+        let err = '';
+        if (data == 'INVALID_ACCOUNT')
+          err = '找不到授权对象的账号';
+        else if (data == 'NETWORK_ERROR')
+          err = '通信失败，请稍候重试';
+        else err = '申请泛护照失败:' + data;
+        
+        hideLoading();
+        return alert(err);
+      }
+      
+      if (!data?.signature) return hideLoading();
+      
+      let pspt = data.body + (new Buffer([0xdf,data.signature.length/2])).toString('hex') + data.signature;
+      let psptHa = CreateHash('sha256').update(Buffer.from(pspt,'hex')).digest();
+      let psptChild = data.child;
+      
+      let new_sdat = NAL.sessData();
+      new_sdat[0] = canReauth? 127: 0;
+      
+      let tm = Math.floor((new Date()).valueOf() / 1000);
+      let beSign = Buffer.concat([new_sdat,colonChar,psptHa,Buffer.from(':'+tm)]);
+      NAL.actionSign('authority',beSign.toString('hex')).then( res2 => {
+        if (typeof res2 == 'string') {
+           hideLoading();
+          return alert('请求签名出错:' + res2);
+        }
+        if (!res2?.signature) return hideLoading();
+        
+        let body = { pspt_child:psptChild, passport:pspt, time:tm,
+          session_data:new_sdat.toString('hex'), pubkey:res2.pubkey,
+          signature:res2.signature, expire_minutes:expired_m };
+        
+        wait__(fetch('/login/authority',
+          {method:'POST',body:JSON.stringify(body),headers:{'X-Authority':token}}
+        ),30000).then( res => {
+          if (res.status == 200)
+            return res.json();
+          else if (res.status == 401 || res.status == 400)
+            return res.text();
+          else return 'UNKNOWN_ERROR';
+        }, e => 'NETWORK_ERROR').then( data2 => {
+          hideLoading();
+          if (typeof data2 == 'string') {
+            let err = '';
+            if (data2 == 'AUTHORIZE_FAIL')
+              err = '存取令牌无效，您需重新登录';
+            else if (data2 == 'INVALID_TIME')
+              err = '机器时间不匹配';
+            else if (data2 == 'INVALID_SIGNATURE')
+              err = '验证签名不通过';
+            else if (data2 == 'NETWORK_ERROR')
+              err = '通信失败，请稍候重试';
+            else err = '请求签证失败:' + data2;
+            return alert(err);
+          }
+          
+          _authorityModal.hide();
+          if (data2 && data2.id) waitFetchVisa(data2.id);
+        });
+      });
+    });
+    
+    function hideLoading() {
+      $('#btn-create-visa .spinner-border').addClass('d-none');
+    }
+  });
+  
+  $('#btn-visa-copy-url').on('click', ev => {
+    let node = $('#visa-share-url');
+    let currValue = node.val();
+    if (currValue) {
+      node.select();
+      document.execCommand('copy');
+      node.val('链接已拷贝');
+      setTimeout(() => node.val(currValue),3000);
+    }
+  });
+  
+  let editor_is_ctrl = false;
+  let textSaveButton = $('.file-tools > .feather-save');
+  $('#md-txt-editor').on('keydown', ev => {
+    if ((ev.keyCode == 115 || ev.keyCode == 83) && (ev.ctrlKey || ev.metaKey)) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      editor_is_ctrl = true;
+      return false;
+    }
+  }).on('keyup', ev => {
+    if (editor_is_ctrl) {
+      textSaveButton.focus();  // it will trigger onchange event
+      setTimeout(() => {
+        textSaveButton.click();
+        setTimeout(() => $('#md-txt-editor').focus(), 600);
+      }, 600);
+    }
+    editor_is_ctrl = false;
+  }).on('keypress', ev => {
+    if (!ev.target.getAttribute('readonly') && textSaveButton.hasClass('disabled')) {
+      setTimeout(() => {
+        md_last_modified = Math.floor((new Date()).valueOf() / 1000);
+        renewToolIcons(true);
+      }, 300);
+    }
+  });
+});
+</script>
+
+</body>
+</html>
