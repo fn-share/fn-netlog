@@ -69,6 +69,7 @@ if __name__ == '__main__':
 #   python3 application.py
 # environ variables:
 #   LOCAL_DIR=/home/webapp/data
-#   WEB_REALM=netlog.nb-chain.cn
+#   ROUTE_PREFIX=/netlog
+#   WEB_REALM=netlog.fn-share.com
 #   WEB_NONCE=WEBSITE_SECRET
 #   APP_SECRET=change_it_please

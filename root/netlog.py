@@ -31,14 +31,14 @@ def md_base_dir(login_sess):
 
 @app.route(_route_prefix+'/')
 @app.route(_route_prefix+'/index.html')
-def index_page():
+def netlog_index_page():
   info = { 'real_website': _real_website,
     'app_admin_pubkey': _app_admin_pubkey,
     'app_strategy': _app_strategy_str }
   return render_template('netlog_index.html',info=info)
 
 @app.route(_route_prefix+'/md/<login_sess>')
-def get_markdown(login_sess):
+def get_netlog_md(login_sess):
   try:
     info = { 'login_session':login_sess, 'content':'', 'modify_at':0 }
     base_dir = md_base_dir(login_sess)
@@ -58,7 +58,7 @@ def get_markdown(login_sess):
   return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/visa/<card_hash>')
-def fetch_visa(card_hash):
+def get_netlog_visa(card_hash):
   return render_template('netlog_fetch_visa.html',info={'hash':card_hash})
 
 def ensure_md_edt_file(edt_file, cfg_file):
@@ -70,7 +70,7 @@ def ensure_md_edt_file(edt_file, cfg_file):
       f.write('{}')
 
 @app.route(_route_prefix+'/stat')
-def get_stat():
+def get_netlog_stat():
   try:
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))
@@ -121,7 +121,7 @@ def get_stat():
   return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/editing', methods=['GET','POST'])
-def do_editing():
+def do_netlog_editing():
   try:
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))
@@ -175,7 +175,7 @@ def do_editing():
   return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/locker', methods=['POST'])
-def post_locker():
+def post_netlog_locker():
   try:
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))
@@ -252,7 +252,7 @@ def post_locker():
   return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/publish', methods=['POST'])
-def post_publish():
+def post_netlog_publish():
   try:
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))

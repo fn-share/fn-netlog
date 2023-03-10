@@ -203,7 +203,7 @@ def set_sess_cache(acc, mutable_num, refresh_seg, nonce_crc, tok, sess_data):
       logger.warning(traceback.format_exc())
 
 @app.route(_route_prefix+'/login/nonce', methods=['POST'])
-def post_login_nonce():
+def post_netlog_login_nonce():
   try:
     # step 1: parse parameters
     data = request.get_json(force=True,silent=True)
@@ -417,7 +417,7 @@ def verify_auth(sid, sdat, auth):
   return True
 
 @app.route(_route_prefix+'/login/refresh', methods=['POST'])
-def post_login_refresh():
+def post_netlog_login_refresh():
   try:
     # step 1: parse client_nonce and check client time
     data = request.get_json(force=True,silent=True)
@@ -488,7 +488,7 @@ _cached_visa = {}  # {b36hash:(tm,card)}
 _cached_visa_check_at = int(time.time())
 
 @app.route(_route_prefix+'/login/authority', methods=['POST'])
-def post_login_authority():
+def post_netlog_login_authority():
   global _cached_visa_check_at
   
   try:
@@ -604,7 +604,7 @@ def post_login_authority():
   return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/login/visa/<card_hash>')
-def get_login_visa(card_hash):
+def get_netlog_login_visa(card_hash):
   try:
     info = _cached_visa.get(card_hash)
     if not info:
