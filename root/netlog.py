@@ -155,6 +155,7 @@ def do_netlog_editing():
       else: cfg = {}
       
       # when current login by green card, and not same unlock operator, and still before _locker_expired
+      now = int(time.time())
       if ord(sdat[:1]) < 0x80 and cfg.get('locker_opener') != sid[:4].hex() and (now - cfg.get('last_open',0)) < _locker_expired:
         return ('UNLOCK_BY_OTHER',400)
       
