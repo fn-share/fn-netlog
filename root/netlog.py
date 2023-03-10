@@ -33,7 +33,7 @@ def index_page():
   info = { 'real_website': _real_website,
     'app_admin_pubkey': _app_admin_pubkey,
     'app_strategy': _app_strategy_str }
-  return render_template('index.html',info=info)
+  return render_template('netlog_index.html',info=info)
 
 @app.route('/md/<login_sess>')
 def get_markdown(login_sess):
@@ -49,7 +49,7 @@ def get_markdown(login_sess):
         info['modify_at'] = int(st.st_mtime)
         info['file_size'] = st.st_size
     
-    return render_template('show_md.html',info=info)
+    return render_template('netlog_show_md.html',info=info)
   
   except:
     logger.warning(traceback.format_exc())
@@ -57,7 +57,7 @@ def get_markdown(login_sess):
 
 @app.route('/visa/<card_hash>')
 def fetch_visa(card_hash):
-  return render_template('fetch_visa.html',info={'hash':card_hash})
+  return render_template('netlog_fetch_visa.html',info={'hash':card_hash})
 
 def ensure_md_edt_file(edt_file, cfg_file):
   if not os.path.isfile(edt_file):
