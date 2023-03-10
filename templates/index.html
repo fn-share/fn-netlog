@@ -339,7 +339,8 @@ function showMsgBox(sTitle, sHtml) {
 }
 
 NAL.afterLogout = function() {
-  _loginModal.show();  // relogin
+  if (!NAL.dialogShowing())
+    _loginModal.show();  // relogin
 };
 
 function formatSeconds(n) {
@@ -366,7 +367,7 @@ function isValidRidFormat(s) {
 }
 
 function editingStat(retry_num, callback, option) {
-  wait__(fetch('/stat',option),10000).then( res => {
+  wait__(fetch('stat',option),10000).then( res => {
     if (res.status == 200)
       return res.json();
     if (callback) callback(null);
@@ -385,7 +386,7 @@ function editingStat(retry_num, callback, option) {
 }
 
 function editingFetch(retry_num, callback, option) {
-  wait__(fetch('/editing',option),10000).then( res => {
+  wait__(fetch('editing',option),10000).then( res => {
     if (res.status == 200)
       return res.text();
     if (callback) callback(null);
@@ -484,7 +485,10 @@ function renewContentShow(onlySummary) {
     // step 2: setup summary page
     $('#md-summary').html(_markdown.render(data.desc));
     
-    let url = location.protocol + '//' + location.host + data.path;
+    let lnkNode = document.createElement('a');
+    lnkNode.setAttribute('href',data.path);
+    let url = lnkNode.href;
+    
     $('#md-share-url').val(url);
     $('#md-share-lnk').attr('href',url);
     md_qr_code.makeCode(url);
@@ -546,7 +550,10 @@ function tempDisableBtn(targ) {
 }
 
 function waitFetchVisa(cardId) {
-  let url = location.protocol + '//' + location.host + '/visa/' + cardId;
+  let lnkNode = document.createElement('a');
+  lnkNode.setAttribute('href','visa/' + cardId);
+  let url = lnkNode.href;
+  
   $('#visa-share-url').val(url);
   $('#visa-share-lnk').attr('href',url);
   visa_qr_code.makeCode(url);
@@ -766,7 +773,7 @@ $( () => {
         
         let loginType = child.slice(0,5) == 'gncd:'? 'GREEN_CARD': 'META_PSPT';
         let body = {role,pubkey:res.pubkey,card:hexContent,nonce_crc:nonceCrc3.toString('hex'),time:tm,signature:res.signature};
-        url_fetch('/login/nonce', data => {
+        url_fetch('login/nonce', data => {
           if (!data || !data.nonce) return alert('登录失败，请稍候再试');
           
           let sessData = data.session_data || '';
@@ -864,7 +871,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,action:'open_locker',signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -909,7 +916,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,action:'close_locker',signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -950,7 +957,7 @@ $( () => {
       return alert('内容未修改，不必提交保存');
     
     let body = '{"content":"' + Buffer.from($('#md-txt-editor').val()).toString('base64') + '"}';
-    wait__(fetch('/editing',{method:'POST',body,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+    wait__(fetch('editing',{method:'POST',body,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
       if (res.status == 200)
         return res.json();
       else if (res.status == 401 || res.status == 400)
@@ -984,7 +991,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('/publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -1082,7 +1089,7 @@ $( () => {
           session_data:new_sdat.toString('hex'), pubkey:res2.pubkey,
           signature:res2.signature, expire_minutes:expired_m };
         
-        wait__(fetch('/login/authority',
+        wait__(fetch('login/authority',
           {method:'POST',body:JSON.stringify(body),headers:{'X-Authority':token}}
         ),30000).then( res => {
           if (res.status == 200)

@@ -72,7 +72,7 @@ function wait__(promise_obj, wait) {
 }
 
 function getVisaCard(retry_num, visaId, callback, option) {
-  wait__(fetch('/login/visa/'+visaId,option),10000).then( res => {
+  wait__(fetch('../login/visa/'+visaId,option),10000).then( res => {
     if (res.status == 200)
       return res.json();
     else if (res.status == 404)

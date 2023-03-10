@@ -13,6 +13,9 @@ from nbc import wallet
 from nbc.util import base36
 from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM, ssi_login_init
 
+_data_dir = os.environ.get('LOCAL_DIR','./data')
+os.makedirs(_data_dir,exist_ok=True)
+
 _real_website = ''
 _app_admin_pubkey = ''
 _app_strategy_str = '{}'
@@ -20,9 +23,9 @@ _app_strategy_str = '{}'
 _locker_expired = 86400    # default is 1 day, would config as: refresh_period*(session_limit+1)
 
 def md_base_dir(login_sess):
-  file_dir = os.path.split(__file__)[0]
-  file_dir = os.path.split(file_dir)[0]
-  return os.path.join(file_dir,'data',login_sess)
+  s = os.path.join(_data_dir,'netlog',login_sess)
+  os.makedirs(s,exist_ok=True)
+  return s
 
 @app.route('/')
 @app.route('/index.html')
@@ -81,7 +84,6 @@ def get_stat():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     base_dir = md_base_dir(login_sess2)
-    if not os.path.isdir(base_dir): os.makedirs(base_dir,exist_ok=True)
     edt_file = os.path.join(base_dir,'editing.md')
     cfg_file = os.path.join(base_dir,'editing.cfg')
     ensure_md_edt_file(edt_file,cfg_file)
@@ -110,7 +112,7 @@ def get_stat():
         tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(curr_open_tm)))
         desc += '\n用户（指纹 %s）于 %s 开锁，正在编辑中 ...\n' % (int(curr_opener,16),tm_desc)
     
-    return { 'desc':desc, 'path':'/md/'+login_sess2, 'opened':opened }
+    return { 'desc':desc, 'path':'md/'+login_sess2, 'opened':opened }
   
   except:
     logger.warning(traceback.format_exc())
@@ -133,7 +135,6 @@ def do_editing():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     base_dir = md_base_dir(login_sess2)
-    if not os.path.isdir(base_dir): os.makedirs(base_dir,exist_ok=True)
     edt_file = os.path.join(base_dir,'editing.md')
     cfg_file = os.path.join(base_dir,'editing.cfg')
     ensure_md_edt_file(edt_file,cfg_file)
@@ -213,7 +214,6 @@ def post_locker():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     base_dir = md_base_dir(login_sess2)
-    if not os.path.isdir(base_dir): os.makedirs(base_dir,exist_ok=True)
     edt_file = os.path.join(base_dir,'editing.md')
     cfg_file = os.path.join(base_dir,'editing.cfg')
     ensure_md_edt_file(edt_file,cfg_file)
@@ -290,7 +290,6 @@ def post_publish():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     base_dir = md_base_dir(login_sess2)
-    if not os.path.isdir(base_dir): os.makedirs(base_dir,exist_ok=True)
     idx_file = os.path.join(base_dir,'index.md')
     edt_file = os.path.join(base_dir,'editing.md')
     cfg_file = os.path.join(base_dir,'editing.cfg')

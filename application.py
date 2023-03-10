@@ -5,7 +5,6 @@ if sys.version_info.major < 3:
   raise Exception('only support python v3+')
 
 _data_dir = os.environ.get('LOCAL_DIR','./data')
-
 os.makedirs(_data_dir,exist_ok=True)
 
 

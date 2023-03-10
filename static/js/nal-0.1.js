@@ -211,9 +211,11 @@ let NAL_ = {
   },
 };
 
-NAL_.dialog = ( () => {
+let inDlgShowing = false;
 
-let inShowing = false;
+NAL_.dialogShowing = function() { return inDlgShowing; };
+
+NAL_.dialog = ( () => {
 
 function noResponse(e) {
   e.stopPropagation();
@@ -236,14 +238,14 @@ function closeDialog() {
     node.style.display = 'none';
   });
   maskNode.style.display = 'none';
-  inShowing = false;
+  inDlgShowing = false;
 }
 
 let nalDialogResolve = null, nalDialogReject = null;
 let nalCheckPassId = 0;
 
 return ( (name,args) => {
-  if (inShowing) {
+  if (inDlgShowing) {
     return new Promise( function(resolve, reject) {
       reject(new Error('SYSTEM_BUSY'));
     });
@@ -386,7 +388,7 @@ return ( (name,args) => {
   
   if (!dialog) return null; // fatal error, name is not one of: 'sign' 'pass' 'rsvd'
   
-  inShowing = true;
+  inDlgShowing = true;
   maskNode.style.display = 'block';
   dialog.style.display = 'block';
   if (startupFn) startupFn();
