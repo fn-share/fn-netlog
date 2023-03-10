@@ -397,7 +397,7 @@ return ( (name,args) => {
   
   function waitingSignPass(param, expected) {
     nalCheckPassId = setInterval( () => {
-      NAL_.call_('pass_sign',param).then( res => {
+      NAL_.call_('pass_sign',param,10000).then( res => {
         if (res?.realm) {
           if (nalCheckPassId) {
             clearInterval(nalCheckPassId);

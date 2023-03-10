@@ -17,6 +17,8 @@ from nbc.util.ecdsa.util import number_to_string, string_to_number
 from nbc.wallet.hdwallet import point_decompress
 from nbc.util.pyaes.aes import AESModeOfOperationCBC as AES
 
+_route_prefix = os.environ.get('ROUTE_PREFIX','')
+
 _platform_pubkey = b''
 _product_pubkey  = b''
 
@@ -200,7 +202,7 @@ def set_sess_cache(acc, mutable_num, refresh_seg, nonce_crc, tok, sess_data):
     except:
       logger.warning(traceback.format_exc())
 
-@app.route('/login/nonce', methods=['POST'])
+@app.route(_route_prefix+'/login/nonce', methods=['POST'])
 def post_login_nonce():
   try:
     # step 1: parse parameters
@@ -414,7 +416,7 @@ def verify_auth(sid, sdat, auth):
     cache_info[2:6] = [refresh_end,nonce_crc,token,sdat]
   return True
 
-@app.route('/login/refresh', methods=['POST'])
+@app.route(_route_prefix+'/login/refresh', methods=['POST'])
 def post_login_refresh():
   try:
     # step 1: parse client_nonce and check client time
@@ -485,7 +487,7 @@ def post_login_refresh():
 _cached_visa = {}  # {b36hash:(tm,card)}
 _cached_visa_check_at = int(time.time())
 
-@app.route('/login/authority', methods=['POST'])
+@app.route(_route_prefix+'/login/authority', methods=['POST'])
 def post_login_authority():
   global _cached_visa_check_at
   
@@ -601,7 +603,7 @@ def post_login_authority():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route('/login/visa/<card_hash>')
+@app.route(_route_prefix+'/login/visa/<card_hash>')
 def get_login_visa(card_hash):
   try:
     info = _cached_visa.get(card_hash)

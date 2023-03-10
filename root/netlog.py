@@ -16,6 +16,8 @@ from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM,
 _data_dir = os.environ.get('LOCAL_DIR','./data')
 os.makedirs(_data_dir,exist_ok=True)
 
+_route_prefix = os.environ.get('ROUTE_PREFIX','')
+
 _real_website = ''
 _app_admin_pubkey = ''
 _app_strategy_str = '{}'
@@ -27,15 +29,15 @@ def md_base_dir(login_sess):
   os.makedirs(s,exist_ok=True)
   return s
 
-@app.route('/')
-@app.route('/index.html')
+@app.route(_route_prefix+'/')
+@app.route(_route_prefix+'/index.html')
 def index_page():
   info = { 'real_website': _real_website,
     'app_admin_pubkey': _app_admin_pubkey,
     'app_strategy': _app_strategy_str }
   return render_template('netlog_index.html',info=info)
 
-@app.route('/md/<login_sess>')
+@app.route(_route_prefix+'/md/<login_sess>')
 def get_markdown(login_sess):
   try:
     info = { 'login_session':login_sess, 'content':'', 'modify_at':0 }
@@ -55,7 +57,7 @@ def get_markdown(login_sess):
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route('/visa/<card_hash>')
+@app.route(_route_prefix+'/visa/<card_hash>')
 def fetch_visa(card_hash):
   return render_template('netlog_fetch_visa.html',info={'hash':card_hash})
 
@@ -67,7 +69,7 @@ def ensure_md_edt_file(edt_file, cfg_file):
     with open(cfg_file,'wt') as f:
       f.write('{}')
 
-@app.route('/stat')
+@app.route(_route_prefix+'/stat')
 def get_stat():
   try:
     # step 1: check SSI token
@@ -118,7 +120,7 @@ def get_stat():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route('/editing', methods=['GET','POST'])
+@app.route(_route_prefix+'/editing', methods=['GET','POST'])
 def do_editing():
   try:
     # step 1: check SSI token
@@ -172,7 +174,7 @@ def do_editing():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route('/locker', methods=['POST'])
+@app.route(_route_prefix+'/locker', methods=['POST'])
 def post_locker():
   try:
     # step 1: check SSI token
@@ -249,7 +251,7 @@ def post_locker():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route('/publish', methods=['POST'])
+@app.route(_route_prefix+'/publish', methods=['POST'])
 def post_publish():
   try:
     # step 1: check SSI token
