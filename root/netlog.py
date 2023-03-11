@@ -18,6 +18,19 @@ os.makedirs(_data_dir,exist_ok=True)
 
 #---- wrap files
 
+_sample_md_txt = '样例文件\n=======\n\n&nbsp;\n\n### 1. 章标题\n\n#### 1.1 节标题\n\n这是正文\n'
+_sample_md_txt = _sample_md_txt.encode('utf-8')
+
+use_s3_file = os.environ.get('ENV_cloud') == 'AWS'
+
+if use_s3_file:
+  from io import BytesIO
+  import boto3, botocore
+  
+  _bucket_name = 'fns-netlog'
+  s3Disk = boto3.resource('s3',region_name=os.environ.get('AWS_REGION','ap-east-1'))
+  s3Bucket = s3Disk.Bucket(_bucket_name)
+
 def md_base_dir(login_sess):
   s = os.path.join(_data_dir,'netlog',login_sess)
   os.makedirs(s,exist_ok=True)
@@ -25,140 +38,282 @@ def md_base_dir(login_sess):
 
 def ensure_md_edt_file(edt_file, cfg_file):
   if not os.path.isfile(edt_file):
-    with open(edt_file,'wt') as f:
-      f.write('样例文件\n=======\n\n&nbsp;\n\n### 1. 章标题\n\n#### 1.1 节标题\n\n这是正文\n')
+    with open(edt_file,'wb') as f:
+      f.write(_sample_md_txt)
   if not os.path.isfile(cfg_file):
-    with open(cfg_file,'wt') as f:
-      f.write('{}')
+    with open(cfg_file,'wb') as f:
+      f.write(b'{}')
+
+def is_s3_404(e):
+  return str(e).find('(404)') >= 0  # 'An error occurred (404) when calling ...'
+
+def read_file_from_s3(path, modiTmAlso=False):
+  try:
+    s3file = s3Disk.Object(_bucket_name,path)
+    payload = BytesIO()
+    s3file.download_fileobj(payload)  # maybe error, 404
+    payload.seek(0,0)
+    
+    modi = 0
+    if modiTmAlso and s3file.last_modified:
+      tupleDate = tuple(s3file.last_modified.timetuple())
+      modi = int(time.mktime(tupleDate))
+    return (modi,payload.read())
+  
+  except botocore.exceptions.ClientError as e:
+    if is_s3_404(e):
+      return (0,None)
+    else: raise
+
+def read_cfg_from_s3(cfg_path):
+  try:
+    s3file = s3Disk.Object(_bucket_name,cfg_path)
+    payload = BytesIO()
+    s3file.download_fileobj(payload)  # maybe error, 404
+    payload.seek(0,0)
+    return json.load(payload)
+  except botocore.exceptions.ClientError as e:
+    if is_s3_404(e):
+      return None
+    else: raise
 
 def get_publish_info(login_sess):
   info = { 'login_session':login_sess, 'content':'', 'modify_at':0 }
-  base_dir = md_base_dir(login_sess)
-  idx_file = os.path.join(base_dir,'index.md')
   
-  if os.path.isdir(base_dir) and os.path.isfile(idx_file):
-    st = os.stat(idx_file)
-    with open(idx_file,'rb') as f:
-      info['content'] = base64.b64encode(f.read()).decode('utf-8')
-      info['modify_at'] = int(st.st_mtime)
-      info['file_size'] = st.st_size
+  if use_s3_file:
+    idx_path = login_sess + '/index.md'
+    last_modi,buf = read_file_from_s3(idx_path,True)
+    if buf is None: buf = b''
+    
+    info['content'] = base64.b64encode(buf).decode('utf-8')
+    info['file_size'] = len(buf)
+    info['modify_at'] = last_modi
+  
+  else:
+    base_dir = md_base_dir(login_sess)
+    idx_file = os.path.join(base_dir,'index.md')
+    
+    if os.path.isdir(base_dir) and os.path.isfile(idx_file):
+      st = os.stat(idx_file)
+      with open(idx_file,'rb') as f:
+        info['content'] = base64.b64encode(f.read()).decode('utf-8')
+        info['modify_at'] = int(st.st_mtime)
+        info['file_size'] = st.st_size
+  
   return info
 
+def desc_editing_state(cfg):
+  if cfg is None:
+    return (False,'尚未开始编辑。\n')
+  
+  opened = bool(cfg.get('opened',0))
+  last_archive = cfg.get('archive_time',0)
+  last_editing = cfg.get('editing_time',0)
+  if not last_archive:
+    desc = '本文尚未发布。\n\n'
+  else:
+    desc = '本文在 %s 最后发布。\n\n' % time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_archive)))
+  
+  if not last_editing:
+    desc += '本文尚未提交更新。\n'
+  else:
+    desc += '用户（指纹 %s）于 %s 最后更新。\n' % (cfg.get('last_editor',''),time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_editing))))
+  
+  curr_opener = cfg.get('locker_opener','')
+  curr_open_tm = cfg.get('last_open',0)
+  if opened and curr_opener and int(time.time()) - curr_open_tm < _locker_expired:
+    tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(curr_open_tm)))
+    desc += '\n用户（指纹 %s）于 %s 开锁，正在编辑中 ...\n' % (int(curr_opener,16),tm_desc)
+  
+  return (opened,desc)
+
 def get_editing_info(login_sess):
-  base_dir = md_base_dir(login_sess)
-  edt_file = os.path.join(base_dir,'editing.md')
-  cfg_file = os.path.join(base_dir,'editing.cfg')
-  ensure_md_edt_file(edt_file,cfg_file)
-  
-  desc = ''; cfg = None; opened = False
-  if os.path.isfile(cfg_file):
-    with open(cfg_file,'rb') as f:
-      cfg = json.load(f)
-  if cfg is not None:
-    opened = bool(cfg.get('opened',0))
-    last_archive = cfg.get('archive_time',0)
-    last_editing = cfg.get('editing_time',0)
-    if not last_archive:
-      desc += '本文尚未发布。\n\n'
-    else:
-      desc += '本文在 %s 最后发布。\n\n' % time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_archive)))
+  if use_s3_file:
+    cfg_path = login_sess + '/editing.cfg'
+    cfg = read_cfg_from_s3(cfg_path)
     
-    if not last_editing:
-      desc += '本文尚未提交更新。\n'
-    else:
-      desc += '用户（指纹 %s）于 %s 最后更新。\n' % (cfg.get('last_editor',''),time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_editing))))
-    
-    curr_opener = cfg.get('locker_opener','')
-    curr_open_tm = cfg.get('last_open',0)
-    if opened and curr_opener and int(time.time()) - curr_open_tm < _locker_expired:
-      tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(curr_open_tm)))
-      desc += '\n用户（指纹 %s）于 %s 开锁，正在编辑中 ...\n' % (int(curr_opener,16),tm_desc)
+    if cfg is None:  # inexistent yet
+      edt_path = login_sess + '/editing.md'
+      s3Bucket.put_object(Key=edt_path,Body=_sample_md_txt)
+      s3Bucket.put_object(Key=cfg_path,Body=b'{}')
   
-  return (opened, desc)
+  else:
+    base_dir = md_base_dir(login_sess)
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    cfg = None
+    if os.path.isfile(cfg_file):
+      with open(cfg_file,'rb') as f:
+        cfg = json.load(f)
+  
+  return desc_editing_state(cfg)
 
 def get_editing_text(login_sess):
-  base_dir = md_base_dir(login_sess)
-  edt_file = os.path.join(base_dir,'editing.md')
-  cfg_file = os.path.join(base_dir,'editing.cfg')
-  ensure_md_edt_file(edt_file,cfg_file)
+  if use_s3_file:
+    edt_path = login_sess + '/editing.md'
+    last_modi,buf = read_file_from_s3(edt_path,False)
+    
+    if buf is None:
+      buf = _sample_md_txt
+      cfg_path = login_sess + '/editing.cfg'
+      s3Bucket.put_object(Key=edt_path,Body=buf)
+      s3Bucket.put_object(Key=cfg_path,Body=b'{}')
+    return buf
   
-  with open(edt_file,'rb') as f:
-    return f.read()
+  else:
+    base_dir = md_base_dir(login_sess)
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    with open(edt_file,'rb') as f:
+      return f.read()
 
 def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
-  base_dir = md_base_dir(login_sess)
-  edt_file = os.path.join(base_dir,'editing.md')
-  cfg_file = os.path.join(base_dir,'editing.cfg')
-  ensure_md_edt_file(edt_file,cfg_file)
+  if use_s3_file:
+    cfg_path = login_sess + '/editing.cfg'
+    cfg = read_cfg_from_s3(cfg_path) or {}
+    
+    # when current login by green card, and not same unlock operator, and still before _locker_expired
+    if by_gncd and cfg.get('locker_opener') != figerprint and (now - cfg.get('last_open',0)) < _locker_expired:
+      return 'UNLOCK_BY_OTHER'
+    
+    cfg['last_editor'] = int(figerprint,16)
+    cfg['editing_time'] = now
+    
+    edt_path = login_sess + '/editing.md'
+    s3Bucket.put_object(Key=edt_path,Body=ctx)
+    s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
+    return 'OK'
   
-  if os.path.isfile(cfg_file):
-    with open(cfg_file,'rb') as f:
-      cfg = json.load(f)
-  else: cfg = {}
-  
-  # when current login by green card, and not same unlock operator, and still before _locker_expired
-  if by_gncd and cfg.get('locker_opener') != figerprint and (now - cfg.get('last_open',0)) < _locker_expired:
-    return 'UNLOCK_BY_OTHER'
-  
-  with open(edt_file,'wb') as f:
-    with open(cfg_file,'wt') as f2:
-      cfg['last_editor'] = int(figerprint,16)
-      cfg['editing_time'] = now
-      json.dump(cfg,f2)
-    f.write(ctx)
-  return 'OK'
+  else:
+    base_dir = md_base_dir(login_sess)
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    if os.path.isfile(cfg_file):
+      with open(cfg_file,'rb') as f:
+        cfg = json.load(f)
+    else: cfg = {}
+    
+    # when current login by green card, and not same unlock operator, and still before _locker_expired
+    if by_gncd and cfg.get('locker_opener') != figerprint and (now - cfg.get('last_open',0)) < _locker_expired:
+      return 'UNLOCK_BY_OTHER'
+    
+    with open(edt_file,'wb') as f:
+      with open(cfg_file,'wt') as f2:
+        cfg['last_editor'] = int(figerprint,16)
+        cfg['editing_time'] = now
+        json.dump(cfg,f2)
+      f.write(ctx)
+    return 'OK'
 
 def modify_locker(action, login_sess, by_gncd, figerprint, now):
-  base_dir = md_base_dir(login_sess)
-  edt_file = os.path.join(base_dir,'editing.md')
-  cfg_file = os.path.join(base_dir,'editing.cfg')
-  ensure_md_edt_file(edt_file,cfg_file)
-  
-  cfg = None; need_save = False
-  with open(cfg_file,'rt') as f:
-    cfg = json.load(f)
+  if use_s3_file:
+    need_save = False
+    cfg_path = login_sess + '/editing.cfg'
+    cfg = read_cfg_from_s3(cfg_path)
+    if cfg is None:
+      cfg = {}
+      need_save = True
+    
     if cfg.get('opened'):  # already opened
-      # less than 0x80 means not login by meta-passport
       if by_gncd and cfg.get('locker_opener') != figerprint and (now-cfg.get('last_open',0)) < _locker_expired:
         return 'UNLOCK_BY_OTHER'   # login by green card, and not same unlock operator, and still before _locker_expired
     
     if action == 'open_locker':
-      if not cfg.get('opened'):
+      if not cfg.get('opened',False):
         cfg['opened'] = True   # open it
         cfg['locker_opener'] = figerprint
-        cfg['last_open'] = int(time.time())
+        cfg['last_open'] = now
         need_save = True
       # else, already unlocked
     else:   # 'close_locker'
-      if cfg.get('opened'):
+      if cfg.get('opened',False):
         cfg['opened'] = False  # close it
         need_save = True
       # else, already locked
+    
+    if need_save:
+      s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
+    
+    return desc_editing_state(cfg)
   
-  if need_save:
-    with open(cfg_file,'wt') as f:
-      json.dump(cfg,f)
-  return 'OK'
+  else:
+    base_dir = md_base_dir(login_sess)
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    cfg = None; need_save = False
+    with open(cfg_file,'rt') as f:
+      cfg = json.load(f)
+      if cfg.get('opened'):  # already opened
+        if by_gncd and cfg.get('locker_opener') != figerprint and (now-cfg.get('last_open',0)) < _locker_expired:
+          return 'UNLOCK_BY_OTHER'   # login by green card, and not same unlock operator, and still before _locker_expired
+      
+      if action == 'open_locker':
+        if not cfg.get('opened'):
+          cfg['opened'] = True   # open it
+          cfg['locker_opener'] = figerprint
+          cfg['last_open'] = now
+          need_save = True
+        # else, already unlocked
+      else:   # 'close_locker'
+        if cfg.get('opened'):
+          cfg['opened'] = False  # close it
+          need_save = True
+        # else, already locked
+    
+    if need_save:
+      with open(cfg_file,'wt') as f:
+        json.dump(cfg,f)
+    
+    return desc_editing_state(cfg)
 
 def publish_editing_text(login_sess, now):
-  base_dir = md_base_dir(login_sess)
-  idx_file = os.path.join(base_dir,'index.md')
-  edt_file = os.path.join(base_dir,'editing.md')
-  cfg_file = os.path.join(base_dir,'editing.cfg')
-  ensure_md_edt_file(edt_file,cfg_file)
+  if use_s3_file:
+    cfg_path = login_sess + '/editing.cfg'
+    cfg = read_cfg_from_s3(cfg_path) or {}
+    
+    if cfg.get('archive_time',0) > cfg.get('editing_time',now):
+      return 'NO_CHANGE'
+    
+    edt_file = login_sess + '/editing.md'
+    last_modi,buf = read_file_from_s3(edt_file,False)
+    if buf is None:
+      return 'NO_EDITING'
+    
+    idx_path = login_sess + '/index.md'
+    s3Bucket.put_object(Key=idx_path,Body=buf)
+    
+    cfg['archive_time'] = now
+    s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
+    return 'OK'
   
-  cfg = json.load(open(cfg_file,'rt'))
-  if cfg.get('archive_time',0) > cfg.get('editing_time',now):
-    return 'NO_CHANGE'
-  
-  with open(edt_file,'rb') as f:
-    with open(idx_file,'wb') as f2:
-      f2.write(f.read())
-  
-  cfg['archive_time'] = now
-  with open(cfg_file,'wt') as f:
-    json.dump(cfg,f)
-  return 'OK'
+  else:
+    base_dir = md_base_dir(login_sess)
+    idx_file = os.path.join(base_dir,'index.md')
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    cfg = json.load(open(cfg_file,'rt'))
+    if cfg.get('archive_time',0) > cfg.get('editing_time',now):
+      return 'NO_CHANGE'
+    
+    with open(edt_file,'rb') as f:
+      with open(idx_file,'wb') as f2:
+        f2.write(f.read())
+    
+    cfg['archive_time'] = now
+    with open(cfg_file,'wt') as f:
+      json.dump(cfg,f)
+    return 'OK'
+
 
 #----
 
@@ -293,9 +448,10 @@ def post_netlog_locker():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     ret = modify_locker(action,login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),now)
-    if ret == 'UNLOCK_BY_OTHER':
-      return (ret,400)
-    else: return {'result':ret}
+    if isinstance(ret,tuple):
+      opened, desc = ret
+      return { 'result':'OK', 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
+    else: return (ret,400)
   
   except:
     logger.warning(traceback.format_exc())
@@ -342,7 +498,7 @@ def post_netlog_publish():
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     ret = publish_editing_text(login_sess2,now)
-    if ret == 'NO_CHANGE':
+    if ret == 'NO_CHANGE' or ret == 'NO_EDITING':
       return (ret,400)
     else: return {'result':ret}
   

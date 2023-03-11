@@ -480,8 +480,12 @@ function whenSuccLogout() {  // overwrite old one
   $('#md-txt-viewer').html('');
 }
 
-function renewContentShow(onlySummary) {
-  editingStat(2, data => {
+function renewContentShow(onlySummary, stateData) {
+  if (stateData?.result)
+    whenGetStat(stateData);
+  else editingStat(2,whenGetStat,{headers:{'X-Authority':NAL.token()}});
+
+  function whenGetStat(data) {
     if (!data || !data.desc) return alert('查询编辑状态失败，请稍候刷新页面再试');
     
     // step 1: save global state to markdown_info
@@ -499,13 +503,16 @@ function renewContentShow(onlySummary) {
     md_qr_code.makeCode(url);
     $('#netlog-summary, #netlog-lnkaddr').removeClass('d-none');
     
-    if (onlySummary) return;
-    
     // step 3: setup editor page
     let isReader = NAL.role() == 'reader';
     $('.file-tools').toggleClass('d-none',isReader);
     $('#md-txt-editor').css('height',isReader?'calc(100vh - 4.5rem)':'calc(100vh - 6.5rem)');
     if (!isReader) renewToolIcons(false);
+    
+    if (onlySummary) {
+      if (!markdown_info.opened) closeEditing();
+      return;
+    }
     
     // step 4: try setup markdown content
     if (isReader)
@@ -513,13 +520,15 @@ function renewContentShow(onlySummary) {
     else {  // login by editor or manager
       if (markdown_info.opened)  // already opened for editing
         tryPullMarkdown(true);
-      else {
-        md_last_post_ctx = md_last_modified = md_last_transfer = 0;
-        $('#md-txt-editor').val('').attr('readonly',true);
-        $('#md-txt-viewer').html('');
-      }
+      else closeEditing();
     }
-  }, {headers:{'X-Authority':NAL.token()}});
+  }
+  
+  function closeEditing() {
+    md_last_post_ctx = md_last_modified = md_last_transfer = 0;
+    $('#md-txt-editor').val('').attr('readonly',true);
+    $('#md-txt-viewer').html('');
+  }
   
   function tryPullMarkdown(setWritable) {
     editingFetch(2, data => {
@@ -905,8 +914,8 @@ $( () => {
           return alert(err);
         }
         
-        if (data?.result == 'OK') {
-          renewContentShow();
+        if (data?.result === 'OK') {
+          renewContentShow(false,data);
         }
         // else, just ignore
       });
@@ -950,9 +959,8 @@ $( () => {
           return alert(err);
         }
         
-        if (data?.result == 'OK') {
-          renewContentShow();
-        }
+        if (data?.result === 'OK')
+          renewContentShow(true,data);
         // else, just ignore
       });
     }).catch(e => null);  // catch 'CANCELED' exception
