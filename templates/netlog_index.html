@@ -987,8 +987,10 @@ $( () => {
       }
       else {
         if (typeof data == 'string') {
-          if (data == 'UNLOCK_BY_OTHER')
-            alert('写权限已被 manager 剥夺，您应先备份刚修改的文本，然后等 manager 结束操作后，才可重新登录获得获得操作权');
+          if (data == 'LARGE_THAN_1M')
+            alert('netlog 文本最大支持 1M 字节，您已超出空间限制');
+          else if (data == 'UNLOCK_BY_OTHER')
+            alert('写权限已被 manager 剥夺，您应先备份刚修改的文本，然后等 manager 编辑结束，然后重新登录继续操作。');
           else alert('提交失败：' + data);
         }
       }

@@ -395,6 +395,9 @@ def do_netlog_editing():
       
       data = request.get_json(force=True,silent=True)
       ctx = base64.b64decode(data['content'])  # ctx can be '' that means reset content
+      if len(ctx) > 0x100000:  # 0x100000 is 1M
+        return ('LARGE_THAN_1M',400)
+      
       now = int(time.time())
       ret = put_editing_text(login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),ctx,now)
       
