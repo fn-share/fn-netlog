@@ -145,7 +145,7 @@ let NAL_ = {
     navigator.serviceWorker.getRegistrations().then( items => {
       let reg = null;
       for (let i=0,item; item=items[i]; i++) {
-        if (item.active && item.active.scriptURL.indexOf('/static/api/sw-') > 0) {
+        if (item.active && item.active.scriptURL.indexOf('/api/sw-') > 0) {
           reg = item;
           break;
         }
@@ -578,7 +578,7 @@ NAL_.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow)
       let tm2 = Math.max(seg * DEFAULT_REFRESH,tm);
       let body = {time:tm2, nonce:Buffer.from(clientNonce).toString('hex')};
       
-      wait__(fetch('/login/refresh',{method:'POST',body:JSON.stringify(body)}),30000).then( res => {
+      wait__(fetch('login/refresh',{method:'POST',body:JSON.stringify(body)}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401)
