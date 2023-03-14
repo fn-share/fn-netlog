@@ -102,7 +102,7 @@ def get_publish_info(login_sess):
   
   return info
 
-def desc_editing_state(cfg):
+def desc_editing_state(cfg, tz=0):
   if cfg is None:
     return (False,'尚未开始编辑。\n')
   
@@ -112,22 +112,22 @@ def desc_editing_state(cfg):
   if not last_archive:
     desc = '本文尚未发布。\n\n'
   else:
-    desc = '本文在 %s 最后发布。\n\n' % time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_archive)))
+    desc = '本文在 %s 最后发布。\n\n' % time.strftime('%y-%m-%d %H:%M:%S',tuple(time.gmtime(last_archive-tz)))
   
   if not last_editing:
     desc += '本文尚未提交更新。\n'
   else:
-    desc += '用户（指纹 %s）于 %s 最后更新。\n' % (cfg.get('last_editor',''),time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(last_editing))))
+    desc += '用户（指纹 %s）于 %s 最后更新。\n' % (cfg.get('last_editor',''),time.strftime('%y-%m-%d %H:%M:%S',tuple(time.gmtime(last_editing-tz))))
   
   curr_opener = cfg.get('locker_opener','')
   curr_open_tm = cfg.get('last_open',0)
   if opened and curr_opener and int(time.time()) - curr_open_tm < _locker_expired:
-    tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.localtime(curr_open_tm)))
+    tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.gmtime(curr_open_tm-tz)))
     desc += '\n用户（指纹 %s）于 %s 开锁，正在编辑中 ...\n' % (int(curr_opener,16),tm_desc)
   
   return (opened,desc)
 
-def get_editing_info(login_sess):
+def get_editing_info(login_sess, tz=0):
   if use_s3_file:
     cfg_path = login_sess + '/editing.cfg'
     cfg = read_cfg_from_s3(cfg_path)
@@ -148,7 +148,7 @@ def get_editing_info(login_sess):
       with open(cfg_file,'rb') as f:
         cfg = json.load(f)
   
-  return desc_editing_state(cfg)
+  return desc_editing_state(cfg,tz)
 
 def get_editing_text(login_sess):
   if use_s3_file:
@@ -211,7 +211,7 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
       f.write(ctx)
     return 'OK'
 
-def modify_locker(action, login_sess, by_gncd, figerprint, now):
+def modify_locker(action, login_sess, by_gncd, figerprint, now, tz=0):
   if use_s3_file:
     need_save = False
     cfg_path = login_sess + '/editing.cfg'
@@ -240,7 +240,7 @@ def modify_locker(action, login_sess, by_gncd, figerprint, now):
     if need_save:
       s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
     
-    return desc_editing_state(cfg)
+    return desc_editing_state(cfg,tz)
   
   else:
     base_dir = md_base_dir(login_sess)
@@ -272,9 +272,9 @@ def modify_locker(action, login_sess, by_gncd, figerprint, now):
       with open(cfg_file,'wt') as f:
         json.dump(cfg,f)
     
-    return desc_editing_state(cfg)
+    return desc_editing_state(cfg,tz)
 
-def publish_editing_text(login_sess, now):
+def publish_editing_text(login_sess, now, tz=0):
   if use_s3_file:
     cfg_path = login_sess + '/editing.cfg'
     cfg = read_cfg_from_s3(cfg_path) or {}
@@ -292,7 +292,6 @@ def publish_editing_text(login_sess, now):
     
     cfg['archive_time'] = now
     s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
-    return 'OK'
   
   else:
     base_dir = md_base_dir(login_sess)
@@ -312,8 +311,8 @@ def publish_editing_text(login_sess, now):
     cfg['archive_time'] = now
     with open(cfg_file,'wt') as f:
       json.dump(cfg,f)
-    return 'OK'
-
+  
+  return desc_editing_state(cfg,tz)
 
 #----
 
@@ -362,7 +361,8 @@ def get_netlog_stat():
     assert len(login_sess) == 20
     
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
-    opened, desc = get_editing_info(login_sess2)
+    tz = int(request.args.get('tz','-480')) * 60
+    opened, desc = get_editing_info(login_sess2,tz)
     
     return { 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
   
@@ -426,6 +426,7 @@ def post_netlog_locker():
     # step 2: get and check parameter
     data = request.get_json(force=True,silent=True)
     tm = int(data.get('time',0))
+    tz = int(data.get('tz',-480)) * 60
     action = data.get('action','')
     pubkey = unhexlify(data.get('pubkey',''))
     self_sign = unhexlify(data.get('signature',''))
@@ -450,7 +451,7 @@ def post_netlog_locker():
     assert len(login_sess) == 20
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
-    ret = modify_locker(action,login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),now)
+    ret = modify_locker(action,login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),now,tz)
     if isinstance(ret,tuple):
       opened, desc = ret
       return { 'result':'OK', 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
@@ -477,6 +478,7 @@ def post_netlog_publish():
     # step 2: get and check parameter
     data = request.get_json(force=True,silent=True)
     tm = int(data.get('time',0))
+    tz = int(data.get('tz',-480)) * 60
     pubkey = unhexlify(data.get('pubkey',''))
     self_sign = unhexlify(data.get('signature',''))
     if not tm or len(pubkey) != 33 or ord(pubkey[:1]) not in (2,3) or len(self_sign) < 64:
@@ -500,10 +502,11 @@ def post_netlog_publish():
     assert len(login_sess) == 20
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
-    ret = publish_editing_text(login_sess2,now)
-    if ret == 'NO_CHANGE' or ret == 'NO_EDITING':
-      return (ret,400)
-    else: return {'result':ret}
+    ret = publish_editing_text(login_sess2,now,tz)
+    if isinstance(ret,tuple):
+      opened, desc = ret
+      return { 'result':'OK', 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
+    else: return (ret,400)  # 'NO_CHANGE' 'NO_EDITING'
   
   except:
     logger.warning(traceback.format_exc())

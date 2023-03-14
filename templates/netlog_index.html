@@ -367,7 +367,8 @@ function isValidRidFormat(s) {
 }
 
 function editingStat(retry_num, callback, option) {
-  wait__(fetch('stat',option),10000).then( res => {
+  let url = 'stat?tz=' + (new Date()).getTimezoneOffset();
+  wait__(fetch(url,option),10000).then( res => {
     if (res.status == 200)
       return res.json();
     
@@ -884,7 +885,7 @@ $( () => {
     NAL.actionSign('open_locker',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
-      let body = {time:tm,action:'open_locker',signature:res.signature,pubkey:res.pubkey};
+      let body = {time:tm,tz:(new Date()).getTimezoneOffset(),action:'open_locker',signature:res.signature,pubkey:res.pubkey};
       wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
@@ -933,7 +934,7 @@ $( () => {
     NAL.actionSign('close_locker',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
-      let body = {time:tm,action:'close_locker',signature:res.signature,pubkey:res.pubkey};
+      let body = {time:tm,tz:(new Date()).getTimezoneOffset(),action:'close_locker',signature:res.signature,pubkey:res.pubkey};
       wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
@@ -1004,12 +1005,13 @@ $( () => {
   
   $('#menu-publish').on('click', ev => {
     if (NAL.role() != 'manager') return;
+    if (markdown_info.opened) return alert('请先关锁，然后再发布');
     
     let tm = Math.floor((new Date()).valueOf() / 1000);
     NAL.actionSign('archive',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
-      let body = {time:tm,signature:res.signature,pubkey:res.pubkey};
+      let body = {time:tm,tz:(new Date()).getTimezoneOffset(),signature:res.signature,pubkey:res.pubkey};
       wait__(fetch('publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
@@ -1035,10 +1037,10 @@ $( () => {
           return alert(err);
         }
         
-        if (data?.result == 'OK') {
+        if (data?.result === 'OK') {
+          renewContentShow(true,data);
           setTimeout(() => {
             alert('发布成功');
-            renewContentShow(true);
           }, 300);
         }
       });
