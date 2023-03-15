@@ -209,6 +209,16 @@
   background-color: #f6f8fa;
 }
 
+.contains-task-list {
+  padding-left: 1rem;
+}
+.task-list-item {
+  display: block;
+}
+.accordion-button {
+  padding: .75rem 1rem;
+}
+
 #md-qr-code, #visa-qr-code {
   width: 200px;
   height: 200px;
@@ -245,6 +255,7 @@ svg.feather {
 <script src="/static/js/bootstrap.min.js"></script>
 <script src="/static/js/markdown-it.min.js"></script>
 <script src="/static/js/markdown-it-attrs.min.js"></script>
+<script src="/static/js/markdown-it-task-lists.min.js"></script>
 <script src="/static/js/qrcode.min.js"></script>
 
 <script src="/static/js/feather.min.js"></script>
@@ -423,7 +434,7 @@ var _markdown = markdownit( {
     return '<pre class="my-hljs"><code>' + _markdown.utils.escapeHtml(str) + '</code></pre>';
   },
   linkify: false,
-}).use(markdownItAttrs);
+}).use(markdownItAttrs).use(markdownitTaskLists);
 
 _markdown.renderer.rules.table_open = function(tokens, idx, options, env, renderer) {
   return '<table class="my-table">';

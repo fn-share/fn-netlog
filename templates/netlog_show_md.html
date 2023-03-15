@@ -64,12 +64,23 @@
 .my-table > tbody > tr:nth-child(2n) {
   background-color: #f6f8fa;
 }
+
+.contains-task-list {
+  padding-left: 1rem;
+}
+.task-list-item {
+  display: block;
+}
+.accordion-button {
+  padding: .75rem 1rem;
+}
 </style>
 
 <script src="/static/js/jquery-3.6.0.slim.min.js"></script>
 <script src="/static/js/highlight.min.js"></script>
 <script src="/static/js/markdown-it.min.js"></script>
 <script src="/static/js/markdown-it-attrs.min.js"></script>
+<script src="/static/js/markdown-it-task-lists.min.js"></script>
 
 <script>
 const SITE_INFO = [ "{{info.login_session}}", {{info.modify_at}}, {{info.file_size}},
@@ -87,7 +98,7 @@ var _markdown = markdownit( {
     return '<pre class="my-hljs"><code>' + _markdown.utils.escapeHtml(str) + '</code></pre>';
   },
   linkify: false,
-}).use(markdownItAttrs);
+}).use(markdownItAttrs).use(markdownitTaskLists);
 
 _markdown.renderer.rules.table_open = function(tokens, idx, options, env, renderer) {
   return '<table class="my-table">';
