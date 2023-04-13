@@ -26,13 +26,10 @@ use_s3_file = os.environ.get('ENV_cloud') == 'AWS'
 
 if use_s3_file:
   from io import BytesIO
-  import boto3, botocore
+  import boto3
   
   _bucket_name = 'fns-netlog'
-  _aws_region = os.environ.get('AWS_REGION','ap-east-1')
-  s3Client = boto3.client('s3',region_name=_aws_region)
-  # s3Disk = boto3.resource('s3',region_name=_aws_region)
-  # s3Bucket = s3Disk.Bucket(_bucket_name)
+  s3Client = boto3.client('s3',region_name=os.environ.get('AWS_REGION','ap-east-1'))
 
 def md_base_dir(login_sess):
   s = os.path.join(_data_dir,'netlog',login_sess)
@@ -47,9 +44,6 @@ def ensure_md_edt_file(edt_file, cfg_file):
     with open(cfg_file,'wb') as f:
       f.write(b'{}')
 
-# def is_s3_404(e):
-#   return str(e).find('(404)') >= 0  # 'An error occurred (404) when calling ...'
-
 def read_file_from_s3(path, modiTmAlso=False):
   try:
     res = s3Client.get_object(Bucket=_bucket_name,Key=path)
@@ -59,51 +53,22 @@ def read_file_from_s3(path, modiTmAlso=False):
       if modiTmAlso:
         dt = res.get('LastModified')
         if dt: modi = int(time.mktime(dt.timetuple()))
-      return (modi,res.Body.read())
+      return (modi,res['Body'].read())
     else: raise Exception('read s3 failed')
   
   except s3Client.exceptions.NoSuchKey:
     return (0,None)
-  
-  '''
-  try:
-    s3file = s3Disk.Object(_bucket_name,path)
-    payload = BytesIO()
-    s3file.download_fileobj(payload)  # maybe error, 404
-    payload.seek(0,0)
-    
-    modi = 0
-    if modiTmAlso and s3file.last_modified:
-      tupleDate = tuple(s3file.last_modified.timetuple())
-      modi = int(time.mktime(tupleDate))
-    return (modi,payload.read())
-  
-  except botocore.exceptions.ClientError as e:
-    if is_s3_404(e):
-      return (0,None)
-    else: raise  '''
 
 def read_cfg_from_s3(cfg_path):
   try:
     res = s3Client.get_object(Bucket=_bucket_name,Key=cfg_path)
     metadata = res.get('ResponseMetadata',{})
     if metadata.get('HTTPStatusCode') == 200:
-      return json.load(res.Body.read().decode('utf-8'))
+      return json.load(res['Body'])
     else: raise Exception('read s3 failed')
   
   except s3Client.exceptions.NoSuchKey:
     return None
-  '''
-  try:
-    s3file = s3Disk.Object(_bucket_name,cfg_path)
-    payload = BytesIO()
-    s3file.download_fileobj(payload)  # maybe error, 404
-    payload.seek(0,0)
-    return json.load(payload)
-  except botocore.exceptions.ClientError as e:
-    if is_s3_404(e):
-      return None
-    else: raise  '''
 
 def get_publish_info(login_sess):
   info = { 'login_session':login_sess, 'content':'', 'modify_at':0 }
@@ -163,9 +128,7 @@ def get_editing_info(login_sess, tz=0):
     if cfg is None:  # inexistent yet
       edt_path = login_sess + os.path.sep + 'editing.md'
       s3Client.put_object(Bucket=_bucket_name,Key=edt_path,Body=_sample_md_txt)
-      # s3Bucket.put_object(Key=edt_path,Body=_sample_md_txt)
       s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=b'{}')
-      # s3Bucket.put_object(Key=cfg_path,Body=b'{}')
   
   else:
     base_dir = md_base_dir(login_sess)
@@ -175,7 +138,7 @@ def get_editing_info(login_sess, tz=0):
     
     cfg = None
     if os.path.isfile(cfg_file):
-      with open(cfg_file,'rb') as f:
+      with open(cfg_file,'rt') as f:
         cfg = json.load(f)
   
   return desc_editing_state(cfg,tz)
@@ -189,9 +152,7 @@ def get_editing_text(login_sess):
       buf = _sample_md_txt
       cfg_path = login_sess + os.path.sep + 'editing.cfg'
       s3Client.put_object(Bucket=_bucket_name,Key=edt_path,Body=buf)
-      # s3Bucket.put_object(Key=edt_path,Body=buf)
       s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=b'{}')
-      # s3Bucket.put_object(Key=cfg_path,Body=b'{}')
     return buf
   
   else:
@@ -217,9 +178,7 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
     
     edt_path = login_sess + os.path.sep + 'editing.md'
     s3Client.put_object(Bucket=_bucket_name,Key=edt_path,Body=ctx)
-    # s3Bucket.put_object(Key=edt_path,Body=ctx)
     s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
-    # s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
     return 'OK'
   
   else:
@@ -229,7 +188,7 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
     ensure_md_edt_file(edt_file,cfg_file)
     
     if os.path.isfile(cfg_file):
-      with open(cfg_file,'rb') as f:
+      with open(cfg_file,'rt') as f:
         cfg = json.load(f)
     else: cfg = {}
     
@@ -273,7 +232,6 @@ def modify_locker(action, login_sess, by_gncd, figerprint, now, tz=0):
     
     if need_save:
       s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
-      # s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
     
     return desc_editing_state(cfg,tz)
   
@@ -324,11 +282,9 @@ def publish_editing_text(login_sess, now, tz=0):
     
     idx_path = login_sess + os.path.sep + 'index.md'
     s3Client.put_object(Bucket=_bucket_name,Key=idx_path,Body=buf)
-    # s3Bucket.put_object(Key=idx_path,Body=buf)
     
     cfg['archive_time'] = now
     s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
-    # s3Bucket.put_object(Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
   
   else:
     base_dir = md_base_dir(login_sess)
@@ -355,9 +311,8 @@ def publish_editing_text(login_sess, now, tz=0):
 
 MAX_IMAGE_FILE = 36
 
-_img_ext = set(['gif','png','jpg','svg','webp'])
-_img_types = { 'gif':'image/gif', 'png':'image/png',
-  'jpg':'image/jpeg', 'svg':'image/svg+xml', 'webp':'image/webp' }
+_img_types = { '.gif':'image/gif', '.png':'image/png',
+  '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.webp':'image/webp' }
 
 def list_s3_img_files(login_sess, max_files=MAX_IMAGE_FILE):
   img_path = login_sess + '/res'
@@ -396,7 +351,7 @@ def read_img_from_s3(path, headers):
       last_modi = s3_headers.get('last-modified')
       if last_modi: headers['Last-Modified'] = last_modi
       
-      return (res.Body,200,headers)
+      return (res['Body'],200,headers)
     else: return ('',status)  # meet error
   
   except s3Client.exceptions.NoSuchKey:
@@ -421,7 +376,7 @@ def get_img_files(login_sess):
     files = os.listdir(img_dir)
     for item in files:
       if item[:1] == '.': continue
-      if os.path.splitext(item)[-1] in _img_ext and os.path.isfile(os.path.join(img_dir,item)):
+      if os.path.splitext(item)[-1] in _img_types and os.path.isfile(os.path.join(img_dir,item)):
         ret.append(item)
   
   return json.dumps(ret)
@@ -438,20 +393,17 @@ def read_img_file(login_sess, img_file, mime_type):
     
     # st = os.stat(img_file)
     # modi_tm = formatdate(st.st_mtime,usegmt=True)
-    # headers = {'Content-Type':mine_type,'Last-Modified':modi_tm}
+    # headers = {'Content-Type':mime_type,'Last-Modified':modi_tm}
     with open(img_file,'rb') as f:
       # for local image file, we not process 304, since image file may changing
-      return (f.read(),200,{'Content-Type':mine_type})
+      return (f.read(),200,{'Content-Type':mime_type})
 
 def write_img_file(login_sess, img_file, ctx):
   if len(ctx) > 0x19000:  # more than 100k
     return ('EXCEED_SIZE',400)
   
-  ext = os.path.splitext(img_file)[-1]
-  mime_type = None
-  if ext:
-    mime_type = _img_types.get(ext[1:])
-  if not mime_type: return ('UNKNOWN_FORMAT',400)
+  mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
+  if not mime_type: return ('UNSUPPORT_IMG_FORMAT',400)
   
   if use_s3_file:
     return write_s3_file(login_sess,img_file,ctx,mime_type)
@@ -466,10 +418,8 @@ def write_img_file(login_sess, img_file, ctx):
       b = os.listdir(img_dir); b2 = []
       for item in b:
         if item[:1] == '.': continue
-        tmp = item.split('.')
-        if len(tmp) >= 2 and tmp[-1] in _img_ext:
-          if os.path.isfile(img_dir + os.path.sep + item):
-            b2.append(item)
+        if os.path.splitext(item)[-1] in _img_types and os.path.isfile(img_dir + os.path.sep + item):
+          b2.append(item)
       
       if len(b2) >= MAX_IMAGE_FILE:
         return ('EXCEED_IMAGE_FILE_NUM',400)
@@ -477,6 +427,25 @@ def write_img_file(login_sess, img_file, ctx):
     with open(img_file,'wb') as f:
       f.write(ctx)
     return 'OK'
+
+def rmv_img_file(login_sess, img_file):
+  try:
+    if use_s3_file:
+      path = login_sess + '/' + img_file
+      s3Client.delete_object(Bucket=_bucket_name,Key=path)
+      return 'OK'
+    
+    else:
+      img_dir = md_base_dir(login_sess + os.path.sep + 'res')
+      img_file = os.path.join(img_dir,img_file)    
+      
+      if os.path.isfile(img_file):  # just overwrite
+        os.remove(img_file)
+      return 'OK'
+  
+  except:
+    logger.warning(traceback.format_exc())
+    return ('WRITE_FILE_ERROR',400)
 
 #----
 
@@ -700,14 +669,16 @@ def get_netlog_images():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/image/<img_file>', methods=['GET','POST'])
+@app.route(_route_prefix+'/res/<img_file>', methods=['GET','POST','DELETE'])
 def get_post_netlog_image(img_file):
   try:
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))
     sdat = base64.b64decode(request.cookies.get('_sdat_',''))
     role = sid[27:]
-    if len(sdat) >= 2 and role and verify_auth(sid,sdat,request.headers.get('X-Authority','')):
+    auth = request.headers.get('X-Authority','')
+    if not auth: auth = request.args.get('token','')
+    if len(sdat) >= 2 and role and verify_auth(sid,sdat,auth):
       pass
     else: return ('AUTHORIZE_FAIL',401)
     
@@ -716,22 +687,23 @@ def get_post_netlog_image(img_file):
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
     # step 2: get image file
-    img_ext = img_file.rsplit('.',maxsplit=1)[-1]
-    if img_ext not in _img_ext:
-      return ('UNSUPPORT_IMG_FORMAT',400)
-    mime_type = _img_types[img_ext]
+    mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
+    if not mime_type: return ('UNSUPPORT_IMG_FORMAT',400)
     
     if request.method == 'GET':
       return read_img_file(login_sess2,img_file,mime_type)
     
-    else:  # 'POST'
+    elif request.method == 'POST':
       img_data = request.get_data(as_text=True)  # data:image/png;bas64,...
       if img_data[:5] == 'data:':
         b = img_data.split(';base64,',maxsplit=1)
         if len(b) == 2:
-          ctx = base64.b64decode(img_data[1])
+          ctx = base64.b64decode(b[1])
           return write_img_file(login_sess2,img_file,ctx)
       return ('INVALID_IMAGE_DATA',400)
+    
+    else:  # 'DELETE'
+      return rmv_img_file(login_sess2,img_file)
   
   except:
     logger.warning(traceback.format_exc())

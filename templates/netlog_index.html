@@ -148,7 +148,7 @@
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#netlog-tab-preview" type="button" role="tab" id="btn-preview">预览</button>
   </li>
   <li class="nav-item">
-    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#netlog-tab-picture" type="button" role="tab" id="btn-preview">图片</button>
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#netlog-tab-picture" type="button" role="tab" id="btn-picture">图片</button>
   </li>
 </ul>
 
@@ -180,7 +180,8 @@
 </div>
 
 <div class="tab-pane fade" id="netlog-tab-picture" role="tabpanel">
-  <div class="mt-2 p-3 rounded-3" style="overflow-y:auto; background-color: rgba(240,240,240,0.5); width:100%; height:calc(100vh - 4.5rem);"></div>
+  <div class="mt-2 p-3 rounded-3" style="overflow-y:auto; width:100%; height:calc(100vh - 4.5rem);" id="picture-preview-area"></div>
+  <div style="display:none"><input type="file" accept="image/*" id="input-img-file" multiple /></div>
 </div>
 
 </div>  <!--  end of .tab-content -->
@@ -251,6 +252,60 @@ svg.feather {
 
 #md-txt-editor[readonly] {
   background-color: #e9ecef;
+}
+
+.res-img-item, .res-img-item2 {
+  display: inline-block;
+  width: 180px;
+  height: 160px;
+  margin: 0.5rem;
+  overflow: hidden;
+  outline: 1px solid gray;
+}
+.res-img-item.selected {
+  outline: 1px solid red;
+}
+.res-img-wrap, .res-img-wrap2 {
+  position: relative;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.res-img-wrap2 {
+  display: none;
+  left: 0px;
+  top: -100%;
+}
+.res-img-item.selected .res-img-wrap2 {
+  display: block;
+}
+.res-img-wrap img {
+  width: 100%;
+  pointer-events: none;
+}
+.res-img-wrap2 img {
+  position: relative;
+  left: 140px;
+  top: 120px;
+  width: 32px;
+  height: 32px;
+  opacity: 0.5;
+}
+.res-img-wrap2 img:hover {
+  opacity: 1;
+}
+.res-img-item2 img {
+  position: relative;
+  left: 58px;
+  top: 48px;
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+}
+.res-img-item2 img:hover {
+  opacity: 1;
 }
 </style>
 
@@ -424,6 +479,25 @@ function editingFetch(retry_num, callback, option) {
     return null;
   }).then( data => {
     if (data === null) return;
+    if (callback) callback(data);
+  });
+}
+
+function imgListFetch(retry_num, callback, option) {
+  wait__(fetch('images',option),10000).then( res => {
+    if (res.status == 200)
+      return res.json();
+    if (res.status == 401) localStorage.clear();
+    if (callback) callback(null);
+    return null;
+  }, e => {  // e.message such like 'TIMEOUT'
+    if (retry_num)
+      imgListFetch(retry_num-1,callback, option);
+    else {
+      if (callback) callback(null);
+    }
+    return null;
+  }).then( data => {
     if (callback) callback(data);
   });
 }
@@ -1200,6 +1274,206 @@ $( () => {
         md_last_modified = Math.floor((new Date()).valueOf() / 1000);
         renewToolIcons(true);
       }, 300);
+    }
+  });
+  
+  // const pictureTrigger = new bootstrap.Tab('#btn-picture');
+  // pictureTrigger.show();
+  let _image_list = null;  // [file1,file2,...]
+  
+  function fake_click(obj) {
+    let ev = document.createEvent("MouseEvents");
+    ev.initMouseEvent("click",true,false,window,0,0,0,0,0,false,false,false,false,0,null);
+    obj.dispatchEvent(ev);
+  }
+  
+  function uploadOneImg(fname, ctx) {
+    let token = NAL.token();
+    return wait__( fetch('res/'+fname,{method:'POST',
+      body:ctx,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      if (res.status == 200)
+        return 'OK';
+      else return res.text();
+    }, e => 'NETWORK_ERROR' );
+  }
+  
+  function removeOneImg(fname) {
+    let token = NAL.token();
+    return wait__( fetch('res/'+fname,{method:'DELETE',headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      if (res.status == 200)
+        return 'OK';
+      else return res.text();
+    }, e => 'NETWORK_ERROR' );
+  }
+  
+  function refreshImgList() {
+    let tok;
+    if (_image_list === null || !(tok=NAL.token())) return;
+    tok = encodeURIComponent(tok);
+    
+    let html_str = '';
+    _image_list.forEach( item => {
+      html_str += `<div class="res-img-item"><div class="res-img-wrap"><img fname="${item}" src="res/${item}?token=${tok}"/></div><div class="res-img-wrap2"><img src="/static/img/trash-2.svg"/></div></div>`;
+    });
+    html_str += '<div class="res-img-item2"><img src="/static/img/plus.svg"/></div>';
+    $('#picture-preview-area').html(html_str)
+  }
+  
+  $('#btn-picture').on('click', ev => {
+    if (_image_list === null) {
+      let tok = NAL.token();
+      if (!tok) return alert('请先登录本系统');
+      
+      imgListFetch(2, data => {
+        if (!Array.isArray(data))
+          return alert('拉取图片列表失败，请稍候再试');
+        _image_list = data;
+        refreshImgList();
+      }, {method:'GET',headers:{'X-Authority':tok}} ); 
+    }
+  });
+  
+  $('#picture-preview-area').on('click', ev => {
+    let targ = $(ev.target);
+    if (ev.target.nodeName == 'IMG') {
+      let ownerNode = ev.target.parentNode;
+      if (ownerNode.classList.contains('res-img-item2')) { // add img file
+        ev.stopPropagation();
+        fake_click($('#input-img-file')[0]);
+      }
+      else if (ownerNode.classList.contains('res-img-wrap2')) { // remove img file
+        ev.stopPropagation();
+        
+        let ownerNode2 = $(ownerNode.parentNode);
+        let imgNode = ownerNode2.find('.res-img-wrap > img');
+        if (imgNode.length) {
+          let fname = imgNode.attr('fname');
+          if (fname && confirm('是否删除文件（' + fname + '）？')) {
+            removeOneImg(fname).then( data => {
+              if (data === 'OK') {
+                ownerNode2.remove();
+                let idx = _image_list.indexOf(fname);
+                if (idx >= 0) _image_list.pop(idx);
+              }
+            });
+          }
+        }
+      }
+      return;
+    }
+    
+    if (targ.hasClass('res-img-item2')) {
+      $('#picture-preview-area .res-img-item').each((idx,node) => node.classList.remove('selected'));
+      return;
+    }
+    
+    if (!targ.hasClass('res-img-wrap') && !targ.hasClass('res-img-wrap2')) return;
+    let currNode = targ.parent('.res-img-item')[0];
+    
+    let items = $('#picture-preview-area .res-img-item');
+    items.each( (idx,node) => {
+      if (currNode === node)
+        node.classList.add('selected');
+      else node.classList.remove('selected');
+    });
+  });
+  
+  $('#input-img-file').on('change', ev => {
+    if (_image_list === null) return;
+    
+    let inputNode = ev.target;
+    let loaded = [], num = 0;
+    let tooLarge = [];
+    for (let i=0,aFile; aFile=inputNode.files[i]; i++) {
+      let fname = aFile.name;
+      let ext = fname.slice(-4);
+      if ( ext != '.png' && ext != '.jpg' && ext != '.gif' && 
+           ext != '.svg' && aFile.name.slice(-5) != '.webp' ) continue;
+      if (aFile.size >= 0x19000)   // max upload 100k
+        tooLarge.push(fname);
+      else {
+        num += 1;
+        loadOneFile(aFile);
+      }
+    }
+    
+    if (num) {
+      waitDone(num,lastStep);
+    }
+    else lastStep(null);
+    
+    function loadOneFile(aFile) {
+      let fileReader = new FileReader();
+      fileReader.onload = function(ev) {
+        let ctx = new Uint8Array(this.result);
+        ctx = 'data:' + aFile.type + ';base64,' + btoa(String.fromCharCode(...ctx));
+        loaded.push([aFile.name,ctx]);
+      }
+      fileReader.readAsArrayBuffer(aFile);
+    }
+    
+    function waitDone(num, nextStep) {
+      let counter = 0;
+      let taskId = setInterval( () => {
+        counter += 1;
+        if (loaded.length >= num) {
+          clearInterval(taskId);
+          nextStep(loaded);
+          return;
+        }
+        
+        if (counter > 60) {
+          clearInterval(taskId);
+          alert('读取文件超时');
+        }
+      },1000);
+    }
+    
+    async function lastStep(loaded) {
+      if (tooLarge.length)
+        alert('上传图片不能超过 100k 字节，以下文件超出限制：' + tooLarge.join(', '));
+      
+      if (loaded) {
+        let waiting = [], oldNum = _image_list.length, newNum = 0, ignoreNum = 0;
+        loaded.forEach( info => {
+          let fname = info[0];
+          let idx = _image_list.indexOf(fname);
+          if (idx < 0) {  // is new file
+            if (oldNum + newNum >= 36)  // max support 36 files
+              ignoreNum += 1;
+            else {
+              newNum += 1;
+              waiting.push(info);
+            }
+          }
+          else waiting.push(info);
+        });
+        
+        let succ = 0, failed = 0;
+        let existNodes = $('.res-img-wrap img');
+        for (let ii=0, info; info=waiting[ii]; ii++) { 
+          let fname = info[0], ctx = info[1];
+          let status = await uploadOneImg(fname,ctx);
+          if (status == 'OK') { // uploading one by one
+            let oldOne = $('.res-img-wrap img[fname="' + fname + '"]');
+            if (oldOne.length) { // replace old
+              oldOne.attr('src',ctx);
+            }
+            else {  // upload new file
+              _image_list.push(fname);
+              let html_str = `<div class="res-img-item"><div class="res-img-wrap"><img fname="${fname}" src="${ctx}"/></div><div class="res-img-wrap2"><img src="/static/img/trash-2.svg"/></div></div>`;
+              $(html_str).insertBefore($('.res-img-item2'));
+            }
+            succ += 1;
+          }
+          else failed += 1;
+        }
+        
+        if (failed) {
+          let desc = '图片上传结束，成功 ' + succ + ' 个文件，失败 ' + failed + '个文件';
+          alert(desc);
+        }
+      }
     }
   });
 });
