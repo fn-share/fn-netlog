@@ -1277,8 +1277,7 @@ $( () => {
     }
   });
   
-  // const pictureTrigger = new bootstrap.Tab('#btn-picture');
-  // pictureTrigger.show();
+  //----
   let _image_list = null;  // [file1,file2,...]
   
   function fake_click(obj) {
@@ -1309,6 +1308,7 @@ $( () => {
   function refreshImgList() {
     let tok;
     if (_image_list === null || !(tok=NAL.token())) return;
+    if (NAL.role() == 'reader') return;
     tok = encodeURIComponent(tok);
     
     let html_str = '';
@@ -1323,6 +1323,7 @@ $( () => {
     if (_image_list === null) {
       let tok = NAL.token();
       if (!tok) return alert('请先登录本系统');
+      if (NAL.role() == 'reader') return;
       
       imgListFetch(2, data => {
         if (!Array.isArray(data))
@@ -1334,6 +1335,8 @@ $( () => {
   });
   
   $('#picture-preview-area').on('click', ev => {
+    if (_image_list === null) return;
+    
     let targ = $(ev.target);
     if (ev.target.nodeName == 'IMG') {
       let ownerNode = ev.target.parentNode;

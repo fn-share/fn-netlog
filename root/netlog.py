@@ -269,18 +269,18 @@ def modify_locker(action, login_sess, by_gncd, figerprint, now, tz=0):
 
 def publish_editing_text(login_sess, now, tz=0):
   if use_s3_file:
-    cfg_path = login_sess + os.path.sep + 'editing.cfg'
+    cfg_path = login_sess + '/editing.cfg'
     cfg = read_cfg_from_s3(cfg_path) or {}
     
     if cfg.get('archive_time',0) > cfg.get('editing_time',now):
       return 'NO_CHANGE'
     
-    edt_file = login_sess + os.path.sep + 'editing.md'
+    edt_file = login_sess + '/editing.md'
     last_modi,buf = read_file_from_s3(edt_file,False)
     if buf is None:
       return 'NO_EDITING'
     
-    idx_path = login_sess + os.path.sep + 'index.md'
+    idx_path = login_sess + '/index.md'
     s3Client.put_object(Bucket=_bucket_name,Key=idx_path,Body=buf)
     
     cfg['archive_time'] = now
@@ -315,10 +315,9 @@ _img_types = { '.gif':'image/gif', '.png':'image/png',
   '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.webp':'image/webp' }
 
 def list_s3_img_files(login_sess, max_files=MAX_IMAGE_FILE):
-  img_path = login_sess + '/res'
+  img_path = login_sess + '/res/'
   resp = s3Client.list_objects(Bucket=_bucket_name,Delimiter='/',Prefix=img_path,MaxKeys=max_files)
   bFiles = resp.get('Contents') or []
-  img_path += '/'
   
   ret = []
   for aFile in bFiles:  # aFile is {Key,LastModified,ETag,Size,StorageClass,Owner}
@@ -333,9 +332,11 @@ def read_img_from_s3(path, headers):
     none_match = headers.get('If-None-Match',None)
     if none_match is not None:
       kwarg['IfNoneMatch'] = none_match
+      headers.pop('If-None-Match',None)      # reuse in reply
     modi_since = headers.get('If-Modified-Since',None)
     if modi_since is not None:
       kwarg['IfModifiedSince'] = modi_since
+      headers.pop('If-Modified-Since',None)  # reuse in reply
     
     res = s3Client.get_object(**kwarg)
     metadata = res.get('ResponseMetadata',{})
@@ -357,12 +358,12 @@ def read_img_from_s3(path, headers):
   except s3Client.exceptions.NoSuchKey:
     return ('INEXISTENT',404)
 
-def write_s3_file(login_sess, img_file, ctx, ctx_type):
+def write_img_to_s3(login_sess, img_file, ctx, ctx_type):
   b = list_s3_img_files(login_sess)
   if len(b) >= MAX_IMAGE_FILE and img_file in b:
     return ('EXCEED_IMAGE_FILE_NUM',400)
   
-  path = login_sess + '/' + img_file
+  path = login_sess + '/res/' + img_file
   s3Client.put_object(Bucket=_bucket_name,Key=path,Body=ctx,ContentType=ctx_type)
   return 'OK'
 
@@ -406,7 +407,7 @@ def write_img_file(login_sess, img_file, ctx):
   if not mime_type: return ('UNSUPPORT_IMG_FORMAT',400)
   
   if use_s3_file:
-    return write_s3_file(login_sess,img_file,ctx,mime_type)
+    return write_img_to_s3(login_sess,img_file,ctx,mime_type)
   
   else:
     img_dir = md_base_dir(login_sess + os.path.sep + 'res')
@@ -431,7 +432,7 @@ def write_img_file(login_sess, img_file, ctx):
 def rmv_img_file(login_sess, img_file):
   try:
     if use_s3_file:
-      path = login_sess + '/' + img_file
+      path = login_sess + '/res/' + img_file
       s3Client.delete_object(Bucket=_bucket_name,Key=path)
       return 'OK'
     
@@ -464,6 +465,43 @@ def netlog_index_page():
     'app_admin_pubkey': _app_admin_pubkey,
     'app_strategy': _app_strategy_str }
   return render_template('netlog_index.html',info=info)
+
+@app.route(_route_prefix+'/md/<login_sess>/res/<img_file>')
+def get_netlog_md_img(login_sess, img_file):
+  try:
+    mime_type = _img_types.get(os.path.splitext(img_file)[-1],'')
+    
+    if use_s3_file:
+      headers2 = {}
+      none_match = request.headers.get('If-None-Match',None)
+      if none_match is not None:
+        headers2['IfNoneMatch'] = none_match
+      modi_since = request.headers.get('If-Modified-Since',None)
+      if modi_since is not None:
+        headers2['IfModifiedSince'] = modi_since
+      
+      if mime_type: headers2['Content-Type'] = mime_type
+      img_path = login_sess + '/res/' + img_file
+      return read_img_from_s3(img_path,headers2)
+    
+    else:
+      base_dir = md_base_dir(login_sess + os.path.sep + 'res')
+      a_file = os.path.join(base_dir,img_file)
+      
+      if os.path.isdir(base_dir) and os.path.isfile(a_file):
+        st = os.stat(a_file)
+        
+        headers = {}
+        if mime_type: headers['Content-Type'] = mime_type
+        headers['Last-Modified'] = formatdate(st.st_mtime,usegmt=True)
+        with open(idx_file,'rb') as f:
+          return (f.read(),200,headers)
+      
+      else: return ('NOT_FOUND',404)
+  
+  except:
+    logger.warning(traceback.format_exc())
+  return ('FORMAT_ERROR',400)
 
 @app.route(_route_prefix+'/md/<login_sess>')
 def get_netlog_md(login_sess):
