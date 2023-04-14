@@ -400,7 +400,7 @@ def read_img_file(login_sess, img_file, mime_type):
       return (f.read(),200,{'Content-Type':mime_type})
 
 def write_img_file(login_sess, img_file, ctx):
-  if len(ctx) > 0x19000:  # more than 100k
+  if len(ctx) > 0x32000:  # more than 200k
     return ('EXCEED_SIZE',400)
   
   mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
@@ -494,7 +494,7 @@ def get_netlog_md_img(login_sess, img_file):
         headers = {}
         if mime_type: headers['Content-Type'] = mime_type
         headers['Last-Modified'] = formatdate(st.st_mtime,usegmt=True)
-        with open(idx_file,'rb') as f:
+        with open(a_file,'rb') as f:
           return (f.read(),200,headers)
       
       else: return ('NOT_FOUND',404)
@@ -710,28 +710,32 @@ def get_netlog_images():
 @app.route(_route_prefix+'/res/<img_file>', methods=['GET','POST','DELETE'])
 def get_post_netlog_image(img_file):
   try:
+    mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
+    if not mime_type: return ('UNSUPPORT_IMG_FORMAT',400)
+    
     # step 1: check SSI token
     sid = base64.b64decode(request.cookies.get('_sid_',''))
     sdat = base64.b64decode(request.cookies.get('_sdat_',''))
     role = sid[27:]
-    auth = request.headers.get('X-Authority','')
-    if not auth: auth = request.args.get('token','')
-    if len(sdat) >= 2 and role and verify_auth(sid,sdat,auth):
-      pass
-    else: return ('AUTHORIZE_FAIL',401)
+    if len(sdat) < 2 or not role:
+      return ('NEED_LOGIN',400)
     
     login_sess = sdat[2:2+ord(sdat[1:2])]
     assert len(login_sess) == 20
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     
-    # step 2: get image file
-    mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
-    if not mime_type: return ('UNSUPPORT_IMG_FORMAT',400)
-    
+    # step 2: get image file, no check authority
     if request.method == 'GET':
       return read_img_file(login_sess2,img_file,mime_type)
     
-    elif request.method == 'POST':
+    # step 3: check authority
+    auth = request.headers.get('X-Authority','')
+    if not auth: auth = request.args.get('token','')
+    if not verify_auth(sid,sdat,auth):
+      return ('AUTHORIZE_FAIL',401)
+    
+    # step 4: process POST or DELETE
+    if request.method == 'POST':
       img_data = request.get_data(as_text=True)  # data:image/png;bas64,...
       if img_data[:5] == 'data:':
         b = img_data.split(';base64,',maxsplit=1)

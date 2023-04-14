@@ -465,6 +465,7 @@ const ECDH = require('create-ecdh')('secp256k1');
 const CryptoJS = require('crypto-js');
 const CreateHash = require('create-hash');
 const Buffer = require('safe-buffer').Buffer;
+const base36 = require('base-x')('0123456789abcdefghijklmnopqrstuvwxyz');
 
 // 6m, 15m, 30m, 1h, 3h, 8h, 1d, 7d
 const session_periods = [360,900,1800,3600,10800,28800,86400,604800];
@@ -612,6 +613,12 @@ NAL_.sessData = function() {
   return lastSessData;
 };
 
+NAL_.loginSess = function() {
+  let size = lastSessData[1];
+  let session = lastSessData.slice(2,2+size);
+  return base36.encode(session); // maybe ''
+};
+
 NAL_.token = function() {
   // step 1: check whole expired or not
   let tm = Math.floor((new Date()).valueOf() / 1000);
@@ -660,6 +667,7 @@ NAL_.logout = function() {
   hmacSegment = null;
   lastHmacSeg = 0;
   lastNonceCrc = null;
+  lastSessData = Buffer.from('0000','hex');
   
   localStorage.setItem('client_nonce','');
   localStorage.setItem('server_nonce','');

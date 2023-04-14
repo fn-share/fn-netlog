@@ -181,7 +181,6 @@
 
 <div class="tab-pane fade" id="netlog-tab-picture" role="tabpanel">
   <div class="mt-2 p-3 rounded-3" style="overflow-y:auto; width:100%; height:calc(100vh - 4.5rem);" id="picture-preview-area"></div>
-  <div style="display:none"><input type="file" accept="image/*" id="input-img-file" multiple /></div>
 </div>
 
 </div>  <!--  end of .tab-content -->
@@ -277,6 +276,7 @@ svg.feather {
   display: none;
   left: 0px;
   top: -100%;
+  background-color: rgba(255,255,255,0.8);
 }
 .res-img-item.selected .res-img-wrap2 {
   display: block;
@@ -287,7 +287,7 @@ svg.feather {
 }
 .res-img-wrap2 img {
   position: relative;
-  left: 140px;
+  left: 104px;
   top: 120px;
   width: 32px;
   height: 32px;
@@ -296,16 +296,27 @@ svg.feather {
 .res-img-wrap2 img:hover {
   opacity: 1;
 }
+.res-img-item2 span {
+  display: inline-block;
+  position: relative;
+  left: 60px; /* 58+2=60 */
+  top: 48px;
+  width: 30px;
+}
 .res-img-item2 img {
   position: relative;
-  left: 58px;
+  left: 28px;  /* 60-30-2=28 */
   top: 48px;
   width: 64px;
   height: 64px;
-  opacity: 0.5;
+  background-color: #fff;
+  border-radius: 0.5rem;
 }
 .res-img-item2 img:hover {
-  opacity: 1;
+  background-color: #f8f8f8;
+}
+.res-img-wrap:hover {
+  opacity: 0.8;
 }
 </style>
 
@@ -1305,18 +1316,123 @@ $( () => {
     }, e => 'NETWORK_ERROR' );
   }
   
+  function fileInputChange(ev) {
+    if (_image_list === null) return;
+    
+    let inputNode = ev.target;
+    let loaded = [], num = 0;
+    let tooLarge = [];
+    for (let i=0,aFile; aFile=inputNode.files[i]; i++) {
+      let fname = aFile.name;
+      let ext = fname.slice(-4);
+      if ( ext != '.png' && ext != '.jpg' && ext != '.gif' && 
+           ext != '.svg' && aFile.name.slice(-5) != '.webp' ) continue;
+      if (aFile.size >= 0x32000)   // max upload 200k
+        tooLarge.push(fname);
+      else {
+        num += 1;
+        loadOneFile(aFile);
+      }
+    }
+    
+    if (num) {
+      waitDone(num,lastStep);
+    }
+    else lastStep(null);
+    
+    function loadOneFile(aFile) {
+      let fileReader = new FileReader();
+      fileReader.onload = function(ev) {
+        let ctx = new Uint8Array(this.result), n = ctx.length;
+        
+        let s = '';
+        for (let i=0; i < n; i++) s += String.fromCharCode(ctx[i]);
+        
+        ctx = 'data:' + aFile.type + ';base64,' + btoa(s);
+        loaded.push([aFile.name,ctx]);
+      }
+      fileReader.readAsArrayBuffer(aFile);
+    }
+    
+    function waitDone(num, nextStep) {
+      let counter = 0;
+      let taskId = setInterval( () => {
+        counter += 1;
+        if (loaded.length >= num) {
+          clearInterval(taskId);
+          nextStep(loaded);
+          return;
+        }
+        
+        if (counter > 60) {
+          clearInterval(taskId);
+          alert('读取文件超时');
+        }
+      },1000);
+    }
+    
+    async function lastStep(loaded) {
+      if (tooLarge.length)
+        alert('上传图片不能超过 200k 字节，以下文件超出限制：' + tooLarge.join(', '));
+      
+      if (loaded) {
+        let waiting = [], oldNum = _image_list.length, newNum = 0, ignoreNum = 0;
+        loaded.forEach( info => {
+          let fname = info[0];
+          let idx = _image_list.indexOf(fname);
+          if (idx < 0) {  // is new file
+            if (oldNum + newNum >= 36)  // max support 36 files
+              ignoreNum += 1;
+            else {
+              newNum += 1;
+              waiting.push(info);
+            }
+          }
+          else waiting.push(info);
+        });
+        
+        let succ = 0, failed = 0;
+        let existNodes = $('.res-img-wrap img');
+        for (let ii=0, info; info=waiting[ii]; ii++) { 
+          let fname = info[0], ctx = info[1];
+          let status = await uploadOneImg(fname,ctx);
+          if (status == 'OK') { // uploading one by one
+            let oldOne = $('.res-img-wrap img[fname="' + fname + '"]');
+            if (oldOne.length) { // replace old
+              oldOne.attr('src',ctx);
+            }
+            else {  // upload new file
+              _image_list.push(fname);
+              let html_str = `<div class="res-img-item"><div class="res-img-wrap"><img fname="${fname}" src="${ctx}"/></div><div class="res-img-wrap2"><img class="is-remove" src="/static/img/trash-2.svg"/>&nbsp;<img class="is-copy" src="/static/img/copy.svg"/></div></div>`;
+              $(html_str).insertBefore($('.res-img-item2'));
+            }
+            succ += 1;
+          }
+          else failed += 1;
+        }
+        
+        if (failed) {
+          let desc = '图片上传结束，成功 ' + succ + ' 个文件，失败 ' + failed + '个文件';
+          alert(desc);
+        }
+      }
+    }
+  }
+  
   function refreshImgList() {
-    let tok;
-    if (_image_list === null || !(tok=NAL.token())) return;
+    let loginSess = NAL.loginSess();
+    if (_image_list === null || !loginSess) return;
     if (NAL.role() == 'reader') return;
-    tok = encodeURIComponent(tok);
     
     let html_str = '';
     _image_list.forEach( item => {
-      html_str += `<div class="res-img-item"><div class="res-img-wrap"><img fname="${item}" src="res/${item}?token=${tok}"/></div><div class="res-img-wrap2"><img src="/static/img/trash-2.svg"/></div></div>`;
+      html_str += `<div class="res-img-item"><div class="res-img-wrap"><img fname="${item}" src="md/${loginSess}/res/${item}"/></div><div class="res-img-wrap2"><img class="is-remove" src="/static/img/trash-2.svg"/>&nbsp;<img class="is-copy" src="/static/img/copy.svg"/></div></div>`;
     });
-    html_str += '<div class="res-img-item2"><img src="/static/img/plus.svg"/></div>';
-    $('#picture-preview-area').html(html_str)
+    html_str += '<div class="res-img-item2"><span><input type="file" accept="image/*" style="width:10px" id="input-img-file" multiple /><input type="text" style="width:10px" id="for-copy" readonly /></span><img src="/static/img/plus.svg"/></div>';
+    
+    let areaNode = $('#picture-preview-area');
+    areaNode.html(html_str);
+    areaNode.find('.res-img-item2 input[type="file"]').on('change',fileInputChange);
   }
   
   $('#btn-picture').on('click', ev => {
@@ -1350,15 +1466,27 @@ $( () => {
         let ownerNode2 = $(ownerNode.parentNode);
         let imgNode = ownerNode2.find('.res-img-wrap > img');
         if (imgNode.length) {
-          let fname = imgNode.attr('fname');
-          if (fname && confirm('是否删除文件（' + fname + '）？')) {
-            removeOneImg(fname).then( data => {
-              if (data === 'OK') {
-                ownerNode2.remove();
-                let idx = _image_list.indexOf(fname);
-                if (idx >= 0) _image_list.pop(idx);
-              }
-            });
+          let fname = imgNode.attr('fname') || '';
+          if (ev.target.classList.contains('is-remove')) {
+            if (fname && confirm('是否删除文件（' + fname + '）？')) {
+              removeOneImg(fname).then( data => {
+                if (data === 'OK') {
+                  ownerNode2.remove();
+                  let idx = _image_list.indexOf(fname);
+                  if (idx >= 0) _image_list.pop(idx);
+                }
+              });
+            }
+          }
+          else if (ev.target.classList.contains('is-copy')) {
+            ev.target.classList.add('invisible'); // simulate clicking
+            setTimeout(() => ev.target.classList.remove('invisible'),300);
+            
+            let s = '![' + fname + '](res/' + fname + ')';
+            let cpNode = $('#for-copy');
+            cpNode.val(s);
+            cpNode.select();
+            document.execCommand('copy');
           }
         }
       }
@@ -1379,105 +1507,6 @@ $( () => {
         node.classList.add('selected');
       else node.classList.remove('selected');
     });
-  });
-  
-  $('#input-img-file').on('change', ev => {
-    if (_image_list === null) return;
-    
-    let inputNode = ev.target;
-    let loaded = [], num = 0;
-    let tooLarge = [];
-    for (let i=0,aFile; aFile=inputNode.files[i]; i++) {
-      let fname = aFile.name;
-      let ext = fname.slice(-4);
-      if ( ext != '.png' && ext != '.jpg' && ext != '.gif' && 
-           ext != '.svg' && aFile.name.slice(-5) != '.webp' ) continue;
-      if (aFile.size >= 0x19000)   // max upload 100k
-        tooLarge.push(fname);
-      else {
-        num += 1;
-        loadOneFile(aFile);
-      }
-    }
-    
-    if (num) {
-      waitDone(num,lastStep);
-    }
-    else lastStep(null);
-    
-    function loadOneFile(aFile) {
-      let fileReader = new FileReader();
-      fileReader.onload = function(ev) {
-        let ctx = new Uint8Array(this.result);
-        ctx = 'data:' + aFile.type + ';base64,' + btoa(String.fromCharCode(...ctx));
-        loaded.push([aFile.name,ctx]);
-      }
-      fileReader.readAsArrayBuffer(aFile);
-    }
-    
-    function waitDone(num, nextStep) {
-      let counter = 0;
-      let taskId = setInterval( () => {
-        counter += 1;
-        if (loaded.length >= num) {
-          clearInterval(taskId);
-          nextStep(loaded);
-          return;
-        }
-        
-        if (counter > 60) {
-          clearInterval(taskId);
-          alert('读取文件超时');
-        }
-      },1000);
-    }
-    
-    async function lastStep(loaded) {
-      if (tooLarge.length)
-        alert('上传图片不能超过 100k 字节，以下文件超出限制：' + tooLarge.join(', '));
-      
-      if (loaded) {
-        let waiting = [], oldNum = _image_list.length, newNum = 0, ignoreNum = 0;
-        loaded.forEach( info => {
-          let fname = info[0];
-          let idx = _image_list.indexOf(fname);
-          if (idx < 0) {  // is new file
-            if (oldNum + newNum >= 36)  // max support 36 files
-              ignoreNum += 1;
-            else {
-              newNum += 1;
-              waiting.push(info);
-            }
-          }
-          else waiting.push(info);
-        });
-        
-        let succ = 0, failed = 0;
-        let existNodes = $('.res-img-wrap img');
-        for (let ii=0, info; info=waiting[ii]; ii++) { 
-          let fname = info[0], ctx = info[1];
-          let status = await uploadOneImg(fname,ctx);
-          if (status == 'OK') { // uploading one by one
-            let oldOne = $('.res-img-wrap img[fname="' + fname + '"]');
-            if (oldOne.length) { // replace old
-              oldOne.attr('src',ctx);
-            }
-            else {  // upload new file
-              _image_list.push(fname);
-              let html_str = `<div class="res-img-item"><div class="res-img-wrap"><img fname="${fname}" src="${ctx}"/></div><div class="res-img-wrap2"><img src="/static/img/trash-2.svg"/></div></div>`;
-              $(html_str).insertBefore($('.res-img-item2'));
-            }
-            succ += 1;
-          }
-          else failed += 1;
-        }
-        
-        if (failed) {
-          let desc = '图片上传结束，成功 ' + succ + ' 个文件，失败 ' + failed + '个文件';
-          alert(desc);
-        }
-      }
-    }
   });
 });
 </script>
