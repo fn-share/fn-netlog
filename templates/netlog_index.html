@@ -599,7 +599,7 @@ function renewContentShow(onlySummary, stateData) {
     $('#md-summary').html(_markdown.render(data.desc));
     
     let lnkNode = document.createElement('a');
-    lnkNode.setAttribute('href',data.path);
+    lnkNode.setAttribute('href',data.path + '/index.html');
     let url = lnkNode.href;
     
     $('#md-share-url').val(url);

@@ -503,7 +503,8 @@ def get_netlog_md_img(login_sess, img_file):
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/md/<login_sess>')
+@app.route(_route_prefix+'/md/<login_sess>/')
+@app.route(_route_prefix+'/md/<login_sess>/index.html')
 def get_netlog_md(login_sess):
   try:
     info = get_publish_info(login_sess)
