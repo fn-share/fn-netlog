@@ -1422,7 +1422,8 @@ $( () => {
   function refreshImgList() {
     let loginSess = NAL.loginSess();
     if (_image_list === null || !loginSess) return;
-    if (NAL.role() == 'reader') return;
+    let role = NAL.role();
+    if (!role || role == 'reader') return;
     
     let html_str = '';
     _image_list.forEach( item => {
@@ -1452,6 +1453,8 @@ $( () => {
   
   $('#picture-preview-area').on('click', ev => {
     if (_image_list === null) return;
+    let role = NAL.role();
+    if (!role || role == 'reader') return;
     
     let targ = $(ev.target);
     if (ev.target.nodeName == 'IMG') {
