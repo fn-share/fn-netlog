@@ -52,7 +52,8 @@ def read_file_from_s3(path, modiTmAlso=False):
       modi = 0
       if modiTmAlso:
         dt = res.get('LastModified')
-        if dt: modi = int(time.mktime(dt.timetuple()))
+        # if dt: modi = int(time.mktime(dt.timetuple()))  # dt.timetuple() convert to localtime
+        if dt: modi = int(dt.timestamp())
       return (modi,res['Body'].read())
     else: raise Exception('read s3 failed')
   
@@ -146,7 +147,7 @@ def get_editing_info(login_sess, tz=0):
 def get_editing_text(login_sess):
   if use_s3_file:
     edt_path = login_sess + os.path.sep + 'editing.md'
-    last_modi,buf = read_file_from_s3(edt_path,False)
+    _, buf = read_file_from_s3(edt_path,False)
     
     if buf is None:
       buf = _sample_md_txt
@@ -276,7 +277,7 @@ def publish_editing_text(login_sess, now, tz=0):
       return 'NO_CHANGE'
     
     edt_file = login_sess + '/editing.md'
-    last_modi,buf = read_file_from_s3(edt_file,False)
+    _, buf = read_file_from_s3(edt_file,False)
     if buf is None:
       return 'NO_EDITING'
     
