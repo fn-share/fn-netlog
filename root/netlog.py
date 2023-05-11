@@ -119,7 +119,8 @@ def desc_editing_state(cfg, tz=0):
     tm_desc = time.strftime('%y-%m-%d %H:%M:%S',tuple(time.gmtime(curr_open_tm-tz)))
     desc += '\n用户（指纹 %s）于 %s 开锁，正在编辑中 ...\n' % (int(curr_opener,16),tm_desc)
   
-  return (opened,desc)
+  auto_publish = bool(cfg.get('auto_publish',0))
+  return (opened,desc,auto_publish)
 
 def get_editing_info(login_sess, tz=0):
   if use_s3_file:
@@ -169,6 +170,7 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
   if use_s3_file:
     cfg_path = login_sess + os.path.sep + 'editing.cfg'
     cfg = read_cfg_from_s3(cfg_path) or {}
+    auto_pub = bool(cfg.get('auto_publish',0))
     
     # when current login by green card, and not same unlock operator, and still before _locker_expired
     if by_gncd and cfg.get('locker_opener') != figerprint and (now - cfg.get('last_open',0)) < _locker_expired:
@@ -177,14 +179,24 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
     cfg['last_editor'] = int(figerprint,16)
     cfg['editing_time'] = now
     
-    edt_path = login_sess + os.path.sep + 'editing.md'
+    # save editor
+    edt_path = login_sess + '/editing.md'
     s3Client.put_object(Bucket=_bucket_name,Key=edt_path,Body=ctx)
+    
+    # try publish
+    if auto_pub:
+      cfg['archive_time'] = now
+      idx_path = login_sess + '/index.md'
+      s3Client.put_object(Bucket=_bucket_name,Key=idx_path,Body=ctx)
+    
+    # save config
     s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
     return 'OK'
   
   else:
     base_dir = md_base_dir(login_sess)
     edt_file = os.path.join(base_dir,'editing.md')
+    idx_file = os.path.join(base_dir,'index.md')
     cfg_file = os.path.join(base_dir,'editing.cfg')
     ensure_md_edt_file(edt_file,cfg_file)
     
@@ -192,17 +204,24 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
       with open(cfg_file,'rt') as f:
         cfg = json.load(f)
     else: cfg = {}
+    auto_pub = bool(cfg.get('auto_publish',0))
     
     # when current login by green card, and not same unlock operator, and still before _locker_expired
     if by_gncd and cfg.get('locker_opener') != figerprint and (now - cfg.get('last_open',0)) < _locker_expired:
       return 'UNLOCK_BY_OTHER'
     
     with open(edt_file,'wb') as f:
-      with open(cfg_file,'wt') as f2:
+      f.write(ctx)
+      if auto_pub:
+        with open(idx_file,'wb') as f2:
+          f2.write(ctx)
+      
+      with open(cfg_file,'wt') as f3:
         cfg['last_editor'] = int(figerprint,16)
         cfg['editing_time'] = now
-        json.dump(cfg,f2)
-      f.write(ctx)
+        if auto_pub: cfg['archive_time'] = now
+        json.dump(cfg,f3)
+    
     return 'OK'
 
 def modify_locker(action, login_sess, by_gncd, figerprint, now, tz=0):
@@ -267,6 +286,32 @@ def modify_locker(action, login_sess, by_gncd, figerprint, now, tz=0):
         json.dump(cfg,f)
     
     return desc_editing_state(cfg,tz)
+
+def set_auto_publish(auto_pub, login_sess, tz=0):
+  if use_s3_file:
+    cfg_path = login_sess + '/editing.cfg'
+    cfg = read_cfg_from_s3(cfg_path) or {}
+    
+    old = cfg.get('auto_publish',False)
+    if old != auto_pub:   # config changed
+      cfg['auto_publish'] = auto_pub
+      s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
+  
+  else:
+    base_dir = md_base_dir(login_sess)
+    idx_file = os.path.join(base_dir,'index.md')
+    edt_file = os.path.join(base_dir,'editing.md')
+    cfg_file = os.path.join(base_dir,'editing.cfg')
+    ensure_md_edt_file(edt_file,cfg_file)
+    
+    cfg = json.load(open(cfg_file,'rt'))
+    old = cfg.get('auto_publish',False)
+    if old != auto_pub:   # config changed
+      cfg['auto_publish'] = auto_pub
+      with open(cfg_file,'wt') as f:
+        json.dump(cfg,f)
+  
+  return desc_editing_state(cfg,tz)
 
 def publish_editing_text(login_sess, now, tz=0):
   if use_s3_file:
@@ -535,9 +580,9 @@ def get_netlog_stat():
     
     login_sess2 = base36.b36encode(login_sess).decode('utf-8')
     tz = int(request.args.get('tz','-480')) * 60
-    opened, desc = get_editing_info(login_sess2,tz)
+    opened, desc, auto_pub = get_editing_info(login_sess2,tz)
     
-    return { 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
+    return { 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
   
   except:
     logger.warning(traceback.format_exc())
@@ -626,9 +671,64 @@ def post_netlog_locker():
     
     ret = modify_locker(action,login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),now,tz)
     if isinstance(ret,tuple):
-      opened, desc = ret
-      return { 'result':'OK', 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
+      opened, desc, auto_pub = ret
+      return { 'result':'OK', 'path':'md/'+login_sess2, 
+        'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
     else: return (ret,400)
+  
+  except:
+    logger.warning(traceback.format_exc())
+  return ('FORMAT_ERROR',400)
+
+@app.route(_route_prefix+'/auto_publish', methods=['POST'])
+def post_netlog_auto_publish():
+  try:
+    # step 1: check SSI token
+    sid = base64.b64decode(request.cookies.get('_sid_',''))
+    sdat = base64.b64decode(request.cookies.get('_sdat_',''))
+    role = sid[27:]
+    if len(sdat) >= 2 and role and verify_auth(sid,sdat,request.headers.get('X-Authority','')):
+      pass
+    else: return ('AUTHORIZE_FAIL',401)
+    
+    if role != b'manager':
+      return ('NOT_SUPPORT',400)
+    
+    # step 2: get and check parameter
+    data = request.get_json(force=True,silent=True)
+    tm = int(data.get('time',0))
+    tz = int(data.get('tz',-480)) * 60
+    auto_pub = bool(data.get('auto_publish',0))
+    pubkey = unhexlify(data.get('pubkey',''))
+    self_sign = unhexlify(data.get('signature',''))
+    if not tm or len(pubkey) != 33 or ord(pubkey[:1]) not in (2,3) or len(self_sign) < 64:
+      return ('INVALID_PARAMTER',400)
+    
+    if ripemd_hash(pubkey) != sid[:20]:
+      return ('INVALID_ACCOUNT',400)
+    
+    now = int(time.time())
+    if abs(now - tm) > 90:   # should be nearby in 1.5 minutes
+      return ('INVALID_TIME',400)
+    
+    # step 3: verify signature
+    act_name = b'set_auto' if auto_pub else b'clear_auto'
+    wa = wallet.Address(pub_key=pubkey)
+    s = b'%s+%s+%s:%i' % (WEBSITE_REALM,role,act_name,tm)
+    if not wa.verify_ex(s,self_sign,single=True):
+      return ('INVALID_SIGNATURE',401)
+    
+    # step 4: locate resource and publish new version
+    login_sess = sdat[2:2+ord(sdat[1:2])]
+    assert len(login_sess) == 20
+    login_sess2 = base36.b36encode(login_sess).decode('utf-8')
+    
+    ret = set_auto_publish(auto_pub,login_sess2,tz)
+    if isinstance(ret,tuple):
+      opened, desc, auto_pub = ret
+      return { 'result':'OK', 'path':'md/'+login_sess2,
+        'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
+    else: return (ret,400)  # 'NO_CHANGE' 'NO_EDITING'
   
   except:
     logger.warning(traceback.format_exc())
@@ -677,8 +777,9 @@ def post_netlog_publish():
     
     ret = publish_editing_text(login_sess2,now,tz)
     if isinstance(ret,tuple):
-      opened, desc = ret
-      return { 'result':'OK', 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc }
+      opened, desc, auto_pub = ret
+      return { 'result':'OK', 'path':'md/'+login_sess2,
+        'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
     else: return (ret,400)  # 'NO_CHANGE' 'NO_EDITING'
   
   except:

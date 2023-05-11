@@ -524,6 +524,26 @@ NAL_.strategy = function(stg) {
   DEFAULT_REFRESH = refresh_periods[stg.session_type];
   REFRESH_LIMIT   = stg.session_limit;
   STRATEGY = stg;
+  
+  let scanStart = (new Date()).valueOf();
+  let scanId = setInterval( () => {
+    let passed = (new Date()).valueOf() - scanStart;
+    if (passed > 90000) return clearInterval(scanId);  // max wait 90s
+    
+    let magic = NAL_.swMagic();
+    let reportVer = NAL_.strategyVer();
+    let realVer = STRATEGY.strategy_ver;
+    if (typeof magic == 'number' && reportVer && realVer) {
+      if (reportVer !== realVer) {
+        NAL_.call_('save_strategy',[NAL_.swHost(),magic,STRATEGY]).then( data => {
+          if (data === 'OK')
+            console.log('! strategy is changed from ' + reportVer + ' to ' + realVer);
+        });
+      }
+      clearInterval(scanId);
+    }
+  },1000);
+  
   return [stg,DEFAULT_PERIOD,DEFAULT_REFRESH,REFRESH_LIMIT];
 };
 

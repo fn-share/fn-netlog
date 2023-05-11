@@ -8,13 +8,13 @@
   "app_admin_wif": "5JcWoESQLRJCy6kTbUr9EEHQB6Txn8Jm1VZsYwcfN5Bp1CXmcB8",
   
   "strategy": {
-    "strategy_ver": 1,
+    "strategy_ver": 2,
     "session_type": 1,
     "session_limit": 14,
     "meta_pspt_expired": 12,
     "roles": {
        "manager": { "level":6, "desc":"管理员",
-         "actions":{"open_locker":"rsvd","close_locker":"auto","statistic":"auto","read_file":"auto","write_file":"auto","archive":"pass","authority":"pass"} },
+         "actions":{"open_locker":"rsvd","close_locker":"auto","statistic":"auto","read_file":"auto","write_file":"auto","archive":"pass","set_auto":"pass","clear_auto":"pass","authority":"pass"} },
        "editor": { "level":5, "desc":"主编",
          "actions":{"open_locker":"rsvd","close_locker":"auto","statistic":"auto","read_file":"auto","write_file":"auto","authority":"pass"} },
        "reader": { "level":3, "desc":"读者", "actions":{"statistic":"auto","read_file":"auto","authority":"pass"} }
@@ -26,7 +26,9 @@
       "close_locker": 3,
       "open_locker": 4,
       "write_file": 4,
-      "archive": 5
+      "archive": 5,
+      "set_auto": 5,
+      "clear_auto": 5
     }
   }
 }

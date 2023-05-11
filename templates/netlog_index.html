@@ -63,6 +63,28 @@
   </div>
 </div>
 
+<div class="modal" tabindex="-1" id="config-modal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Netlog 配置</h5>
+        <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+<h5>自动发布</h5>
+<p>如果设置自动发布，每次保存都会自动发布。请注意，如果启用自动发布选项，发布权限不再是管理员专享，凡有编辑权限的都能发布 Netlog。</p>
+<div class="form-check">
+  <input class="form-check-input" type="checkbox" value="" id="check-auto-publish">
+  <label class="form-check-label" for="check-auto-publish">自动发布</label>
+</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary shadow-none" id="btn-submit-config"><span class="spinner-border spinner-border-sm d-none" role="status"></span> 确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" tabindex="-1" id="authority-modal">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -133,6 +155,8 @@
       <li><button class="dropdown-item" id="menu-login">登录</button></li>
       <li><button class="dropdown-item" id="menu-logout" disabled>登出</button></li>
       <li><button class="dropdown-item" id="menu-login-id" disabled>登录者身份</button></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><button class="dropdown-item" id="menu-config" disabled>配置</button></li>
       <li><hr class="dropdown-divider"></li>
       <li><button class="dropdown-item" id="menu-publish" disabled>发布 Netlog</button></li>
       <li><button class="dropdown-item" id="menu-authority" disabled>授权生成签证</button></li>
@@ -357,6 +381,7 @@ const _loginModal  = new bootstrap.Modal($('#login-modal'),{backdrop:'static',ke
 const _msgboxModal = new bootstrap.Modal($('#msgbox-modal'),{backdrop:'static',keyboard:true});
 const _authorityModal = new bootstrap.Modal($('#authority-modal'),{backdrop:'static',keyboard:true});
 const _saveVisaModal = new bootstrap.Modal($('#save-visa-modal'),{backdrop:'static',keyboard:true});
+const _configModal = new bootstrap.Modal($('#config-modal'),{backdrop:'static',keyboard:true});
 
 function htmlEscape(text) { 
   return text.replace(/[<>"&]/g, function(match, pos, originalText) { // "
@@ -552,6 +577,7 @@ function updateLoginMenu(hasLogin) {
   $('#menu-login').attr('disabled',hasLogin);
   $('#menu-logout').attr('disabled',!hasLogin);
   $('#menu-login-id').attr('disabled',!hasLogin);
+  $('#menu-config').attr('disabled',!hasLogin);
   $('#menu-publish').attr('disabled',!isManager);
   
   let canAuth = false;
@@ -593,7 +619,7 @@ function renewContentShow(onlySummary, stateData) {
     if (!data || !data.desc) return alert('查询编辑状态失败，请稍候刷新页面再试');
     
     // step 1: save global state to markdown_info
-    markdown_info = {path:data.path,opened:data.opened};
+    markdown_info = {path:data.path,opened:data.opened,auto_publish:data.auto_publish};
     
     // step 2: setup summary page
     $('#md-summary').html(_markdown.render(data.desc));
@@ -959,6 +985,72 @@ $( () => {
         }
       }
     });
+  });
+  
+  let _last_auto_publish = false;
+  
+  $('#menu-config').on('click', ev => {
+    if (!NAL.token()) return;  // need login first
+    _last_auto_publish = !!markdown_info.auto_publish;
+    $('#check-auto-publish').prop('checked',_last_auto_publish);
+    _configModal.show();
+  });
+  
+  $('#btn-submit-config').on('click', ev => {
+    let curr_auto = !!markdown_info.auto_publish;
+    let next_auto = !!$('#check-auto-publish').prop('checked');
+    if (curr_auto === next_auto)
+      return _configModal.hide();  // no change
+    
+    if (NAL.role() != 'manager')
+      return alert('只有管理员才能修改配置');
+    
+    tempDisableBtn(ev.target);
+    $('#btn-submit-config .spinner-border').removeClass('d-none');
+    
+    let tm = Math.floor((new Date()).valueOf() / 1000);
+    let act_name = next_auto? 'set_auto': 'clear_auto';
+    NAL.actionSign(act_name,Buffer.from(tm+'').toString('hex')).then(res => {
+      if (!res || !res.signature) {
+        $('#btn-submit-config .spinner-border').addClass('d-none');
+        return alert('请求签名失败');
+      }
+      
+      let body = {auto_publish:next_auto,time:tm,tz:(new Date()).getTimezoneOffset(),signature:res.signature,pubkey:res.pubkey};
+      wait__(fetch('auto_publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+        if (res.status == 200)
+          return res.json();
+        else if (res.status == 401 || res.status == 400)
+          return res.text();
+        else return 'UNKNOWN_ERROR';
+      }, e => (console.log(e),'NETWORK_ERROR')).then( data => {
+        $('#btn-submit-config .spinner-border').addClass('d-none');
+        
+        if (typeof data == 'string') {
+          let err = '';
+          if (data == 'AUTHORIZE_FAIL')
+            err = '存取令牌无效，您需重新登录';
+          else if (data == 'INVALID_SIGNATURE')
+            err = '验证签名不通过';
+          else if (data == 'INVALID_ACCOUNT')
+            err = '账号不匹配';
+          else if (data == 'INVALID_TIME')
+            err = '机器时间不匹配';
+          else if (data == 'NETWORK_ERROR')
+            err = '通信失败，请稍候重试';
+          else err = '锁操作失败:' + data;
+          return alert(err);
+        }
+        
+        if (data?.result === 'OK') {
+          renewContentShow(true,data);
+          setTimeout(() => {
+            alert('设置成功');
+            _configModal.hide();
+          }, 300);
+        }
+      });
+    }).catch(e => null);  // catch 'CANCELED' exception
   });
   
   $('#btn-copy-url').on('click', ev => {
