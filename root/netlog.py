@@ -71,7 +71,7 @@ def read_cfg_from_s3(cfg_path):
   except s3Client.exceptions.NoSuchKey:
     return None
 
-def get_publish_info(login_sess):
+def get_publish_info(login_sess, use_base64=True):
   info = { 'login_session':login_sess, 'content':'', 'modify_at':0 }
   
   if use_s3_file:
@@ -79,7 +79,9 @@ def get_publish_info(login_sess):
     last_modi,buf = read_file_from_s3(idx_path,True)
     if buf is None: buf = b''
     
-    info['content'] = base64.b64encode(buf).decode('utf-8')
+    if use_base64:
+      info['content'] = base64.b64encode(buf).decode('utf-8')
+    else: info['content'] = buf.decode('utf-8')
     info['file_size'] = len(buf)
     info['modify_at'] = last_modi
   
@@ -90,7 +92,9 @@ def get_publish_info(login_sess):
     if os.path.isdir(base_dir) and os.path.isfile(idx_file):
       st = os.stat(idx_file)
       with open(idx_file,'rb') as f:
-        info['content'] = base64.b64encode(f.read()).decode('utf-8')
+        if use_base64:
+          info['content'] = base64.b64encode(f.read()).decode('utf-8')
+        else: info['content'] = f.read().decode('utf-8')
         info['modify_at'] = int(st.st_mtime)
         info['file_size'] = st.st_size
   
@@ -555,6 +559,15 @@ def get_netlog_md(login_sess):
   try:
     info = get_publish_info(login_sess)
     return render_template('netlog_show_md.html',info=info)
+  except:
+    logger.warning(traceback.format_exc())
+  return ('FORMAT_ERROR',400)
+
+@app.route(_route_prefix+'/md/<login_sess>/index.md')
+def get_netlog_raw(login_sess):
+  try:
+    info = get_publish_info(login_sess,False)
+    return info['content']
   except:
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)

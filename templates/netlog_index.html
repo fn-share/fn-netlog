@@ -184,13 +184,21 @@
     <div class="mt-2" id="md-summary"></div>
   </div>
   <div class="mt-5 d-none" id="netlog-lnkaddr">
-    <h5>Netlog 正文链接：</h5>
+    <h5>Netlog 公开发布的链接：</h5>
     <div class="input-group mt-2" style="width:340px">
       <input type="text" class="form-control text-truncate shadow-none" id="md-share-url" readonly>
       <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-copy-url">拷贝</button>
     </div>
     <div class="mt-2"><a target="_blank" id="md-share-lnk">点此打开链接</a>，或者扫描如下二维码：</div>
     <div class="mb-3" id="md-qr-code" style="padding:10px;"></div>
+    
+    <h5 class="mt-4">Netlog 原始 markdown 链接：</h5>
+    <div class="input-group mt-2" style="width:340px">
+      <input type="text" class="form-control text-truncate shadow-none" id="raw-share-url" readonly>
+      <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-copy-raw">拷贝</button>
+    </div>
+    <div class="mt-2"><a target="_blank" id="raw-share-lnk">点此打开链接</a>，或者扫描如下二维码：</div>
+    <div class="mb-3" id="raw-qr-code" style="padding:10px;"></div>
   </div>
 </div>
 
@@ -250,11 +258,11 @@
   padding: .75rem 1rem;
 }
 
-#md-qr-code, #visa-qr-code {
+#md-qr-code, #raw-qr-code, #visa-qr-code {
   width: 200px;
   height: 200px;
 }
-#md-qr-code img, #visa-qr-code img {
+#md-qr-code img, #raw-qr-code img, #visa-qr-code img {
   width: 100%;
   height: 100%;
 }
@@ -564,6 +572,7 @@ _markdown.renderer.rules.code_inline = function(tokens, idx, options, env, rende
 };
 
 let md_qr_code = new QRCode('md-qr-code');
+let raw_qr_code = new QRCode('raw-qr-code');
 let visa_qr_code = new QRCode('visa-qr-code');
 
 let markdown_info = {};
@@ -631,8 +640,16 @@ function renewContentShow(onlySummary, stateData) {
     $('#md-share-url').val(url);
     $('#md-share-lnk').attr('href',url);
     md_qr_code.makeCode(url);
-    $('#netlog-summary, #netlog-lnkaddr').removeClass('d-none');
     
+    lnkNode.setAttribute('href',data.path + '/index.md');
+    let url2 = lnkNode.href;
+    
+    $('#raw-share-url').val(url2);
+    $('#raw-share-lnk').attr('href',url2);
+    raw_qr_code.makeCode(url2);
+    
+    $('#netlog-summary, #netlog-lnkaddr').removeClass('d-none');
+
     // step 3: setup editor page
     let isReader = NAL.role() == 'reader';
     $('.file-tools').toggleClass('d-none',isReader);
@@ -1053,8 +1070,8 @@ $( () => {
     }).catch(e => null);  // catch 'CANCELED' exception
   });
   
-  $('#btn-copy-url').on('click', ev => {
-    let node = $('#md-share-url');
+  $('#btn-copy-url, #btn-copy-raw').on('click', ev => {
+    let node = ev.target.id == 'btn-copy-url'? $('#md-share-url'): $('#raw-share-url');
     let currValue = node.val();
     if (currValue) {
       node.select();
