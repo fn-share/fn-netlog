@@ -191,7 +191,8 @@ def put_editing_text(login_sess, by_gncd, figerprint, ctx, now):
     if auto_pub:
       cfg['archive_time'] = now
       idx_path = login_sess + '/index.md'
-      s3Client.put_object(Bucket=_bucket_name,Key=idx_path,Body=ctx)
+      # s3Client.put_object(Bucket=_bucket_name,Key=idx_path,Body=ctx)
+      s3Client.copy_object(Bucket=_bucket_name,Key=idx_path,CopySource={'Bucket':_bucket_name,'Key':edt_path})
     
     # save config
     s3Client.put_object(Bucket=_bucket_name,Key=cfg_path,Body=json.dumps(cfg).encode('utf-8'))
