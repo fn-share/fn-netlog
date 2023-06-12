@@ -216,7 +216,7 @@ def post_netlog_login_nonce():
     if (not role) or (role not in _strategy['roles']) or len(client_nonce_crc) != 3 or len(card_ctx) <= 64 or len(self_sign) < 64:
       return ('INVALID_PARAMTER',400)
     
-    if abs(time.time() - tm) > 90:   # should be nearby in 1.5 minutes
+    if abs(time.time() - tm) > 300:   # should be nearby in 5 minutes
       return ('INVALID_TIME',400)
     
     # step 2: parse and verify card
@@ -519,7 +519,7 @@ def post_netlog_login_authority():
     if old_auth_level != 127 and new_auth_level != 0:  # old_auth_level must be 0 or 127
       return ('NOT_ALLOW',400)      # can not turn low-level authority to high-level
     now = int(time.time())
-    if abs(now - tm) > 90:  # should be nearby within 1.5 minutes
+    if abs(now - tm) > 300:  # should be nearby within 5 minutes
       return ('INVALID_TIME',400)
     
     # step 3: check passport
