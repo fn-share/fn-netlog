@@ -564,14 +564,19 @@ def get_netlog_md(login_sess):
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
+_cors_headers =  [ ('Access-Control-Allow-Origin','*'),
+  ('Access-Control-Allow-Methods','GET,POST,OPTIONS'),
+  ('Access-Control-Allow-Headers','*'),
+  ('Access-Control-Allow-Credentials','true') ]
+
 @app.route(_route_prefix+'/md/<login_sess>/index.md')
 def get_netlog_raw(login_sess):
   try:
     info = get_publish_info(login_sess,False)
-    return info['content']
+    return (info['content'],200,_cors_headers)
   except:
     logger.warning(traceback.format_exc())
-  return ('FORMAT_ERROR',400)
+  return ('FORMAT_ERROR',400,_cors_headers)
 
 @app.route(_route_prefix+'/visa/<card_hash>')
 def get_netlog_visa(card_hash):
