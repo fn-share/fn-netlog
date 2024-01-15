@@ -367,7 +367,7 @@ svg.feather {
 <script>feather.replace()</script>
 
 <script src="/static/js/nbc_base-0.1.min.js"></script>
-<script src="/static/js/nal-0.1.js"></script>
+<script src="/static/js/nal-0.2.js"></script>
 
 <script>
 const CreateHash = require('create-hash');
@@ -688,7 +688,7 @@ function renewContentShow(onlySummary, stateData) {
       
       $('#md-txt-editor').val(data);
       $('#md-txt-viewer').html(_markdown.render(data));
-      md_last_post_ctx = md_last_modified = md_last_transfer = Math.floor((new Date()).valueOf() / 1000);
+      md_last_post_ctx = md_last_modified = md_last_transfer = Math.floor((new Date()).getTime() / 1000);
     }, {method:'GET',headers:{'X-Authority':NAL.token()}} ); 
   }
 }
@@ -794,63 +794,40 @@ function initLoginCfg(lastRole, cards) {
 
 $( () => {
   NAL.waitReady(30).then( verInfo => {
-    if (typeof verInfo == 'string') {  // get ver_info failed
-      if (verInfo == 'none')
-        alert('service worker 未安装，本站将无法正常提供功能');
-      else {
-        console.log('SW state: ' + verInfo);
-        alert('service worker 已安装但未正常激活，请重启浏览器，或关机重启再试');
-      }
+    if (verInfo === null) {
+      alert('NBC 账号未就绪');
     }
     else {
-      if (verInfo.acc_type === 'restorable') {
-        console.log('BIP account is ready.');
-        whenNalReady();
-      }
-      else alert('service worker 中的账号未就绪，本站将无法正常提供功能');
+      console.log('BIP account is ready.');
+      whenNalReady();
     }
+  }).catch( e => {
+    if (e.message == 'FAILED')
+      alert('未发现 NAL 插件，本站无法正常提供功能');
   });
   
   function whenNalReady() {
     // step 1: set SW magic
-    let now = Math.floor((new Date()).valueOf() / 1000);
-    let tm = parseInt(localStorage.getItem('sw_magic_time') || 0);
-    let newMagic = 0, oldMagic = parseInt(localStorage.getItem('sw_magic_last') || 0);
-    if ((now-tm) < DEFAULT_REFRESH && oldMagic) // reuse session when before one refresh segment
-      newMagic = oldMagic;
-    else {
-      while (!newMagic) {  // ensure newMagic != 0
-        newMagic = parseInt(generateRand(6).toString('hex'),16);
-      }
-    }
-    
-    NAL.swMagic(newMagic, magic => {
-      if (typeof magic != 'number')
-        return alert('申请 service worker magic 出错');
-      
-      // save sid and time to localStorage, so other same site page can reuse it
-      localStorage.setItem('sw_magic_last',magic+'');
-      localStorage.setItem('sw_magic_time',now+'');
-      
-      if (NAL.strategyVer() !== 1)     // version mismatch
-        NAL.call_('save_strategy',[NAL.swHost(),magic,STRATEGY]);
+    NAL.swMagic( magic => {
+      if (NAL.strategyVer() !== 1)  // version mismatch
+        NAL.call_('save_strategy',[magic,STRATEGY]);
       
       // step 2: list cards
-      NAL.call('list_cards',[NAL.swHost(),magic]).then( res => {
+      NAL.call('list_cards',[magic]).then( res => {
         let cards = res instanceof Array? res: [];
         
         // step 3: init GUI
         let role = localStorage.getItem('login_role');
         initLoginCfg(role,cards);
         
+        let now = Math.floor((new Date()).getTime() / 1000);
         let tm = parseInt(localStorage.getItem('last_login') || 0);
         let nonce1 = localStorage.getItem('client_nonce');
         let nonce2 = localStorage.getItem('server_nonce');
-        let sessData = localStorage.getItem('session_data') || '';
-        sessData = Buffer.from(sessData,'hex');
+        let sessData = Buffer.from(localStorage.getItem('session_data') || '','hex');
         if (tm && (now-tm) < DEFAULT_REFRESH*REFRESH_LIMIT && nonce1 && nonce2 && role) {  // already login
           NAL.checkStart(role,nonce1,nonce2,sessData,tm,now,true);
-          whenSuccLogin();
+          whenSuccLogin();    // already login
         }
         else _loginModal.show();  // need re-login
       });
@@ -899,7 +876,7 @@ $( () => {
         if (visaChild === 'gncd')
           return doLogin(visaRole,'gncd:'+card[6],card[7]);
         
-        NAL.call('get_gncd',[NAL.swHost(),NAL.swMagic(),visaRole,visaChild,APP_ADMIN_PUBKEY],30000).then( res => {
+        NAL.call('get_gncd',[NAL.swMagic(),visaRole,visaChild,APP_ADMIN_PUBKEY],30000).then( res => {
           if (!res || !res.card) {
             if (res && typeof res == 'string')
               alert('请求绿卡出错:' + res);
@@ -920,7 +897,7 @@ $( () => {
     }
     
     function doLogin(role, child, hexContent) {
-      let tm = Math.floor((new Date()).valueOf() / 1000);
+      let tm = Math.floor((new Date()).getTime() / 1000);
       let tmSeg = Math.floor(tm / DEFAULT_REFRESH);
       let nonce = getRandomStr(32);
       let nonceCrc3 = CreateHash('sha256').update(Buffer.from(role+':'+nonce+':'+tmSeg)).digest().slice(0,3);
@@ -929,7 +906,7 @@ $( () => {
       
       NAL.dialog('sign',[role+'+login',child,beSign.toString('hex')]).then( res => {
         if (!(res?.signature)) return;  // ignore, unexpected
-        if (Math.floor((new Date()).valueOf()/1000) - tm > 180)
+        if (Math.floor((new Date()).getTime()/1000) - tm > 180)
           return alert('签名超时');  // more than 3 minutes
         
         let loginType = child.slice(0,5) == 'gncd:'? 'GREEN_CARD': 'META_PSPT';
@@ -962,7 +939,7 @@ $( () => {
     let hasLogin = !!NAL.token();
     updateLoginMenu(hasLogin);
     if (!hasLogin) {
-      NAL.call('list_cards',[NAL.swHost(),NAL.swMagic()]).then( res => {
+      NAL.call('list_cards',[NAL.swMagic()]).then( res => {
         let cards = res instanceof Array? res: [];
         let role = localStorage.getItem('login_role');
         initLoginCfg(role,cards);
@@ -982,7 +959,7 @@ $( () => {
     if (!NAL.token()) return;
     
     // we need fetch login info from SW since current page maybe reloaded
-    NAL.call('login_info',[NAL.swHost(),NAL.swMagic()]).then( res => {
+    NAL.call('login_info',[NAL.swMagic()]).then( res => {
       if (res && res.role) {
         let desc = '';
         if (res.flag == 'gncd')
@@ -1025,7 +1002,7 @@ $( () => {
     tempDisableBtn(ev.target);
     $('#btn-submit-config .spinner-border').removeClass('d-none');
     
-    let tm = Math.floor((new Date()).valueOf() / 1000);
+    let tm = Math.floor((new Date()).getTime() / 1000);
     let act_name = next_auto? 'set_auto': 'clear_auto';
     NAL.actionSign(act_name,Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) {
@@ -1084,7 +1061,7 @@ $( () => {
   $('#btn-preview').on('click', ev => {
     if (md_last_transfer < md_last_modified) {
       $('#md-txt-viewer').html(_markdown.render($('#md-txt-editor').val()));
-      md_last_transfer = Math.floor((new Date()).valueOf() / 1000);
+      md_last_transfer = Math.floor((new Date()).getTime() / 1000);
     }
   });
   
@@ -1093,7 +1070,7 @@ $( () => {
     if (NAL.role() == 'reader') return; // ignore when by reader
     if (markdown_info.opened) return;   // ignore when already opened
     
-    let tm = Math.floor((new Date()).valueOf() / 1000);
+    let tm = Math.floor((new Date()).getTime() / 1000);
     NAL.actionSign('open_locker',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
@@ -1142,7 +1119,7 @@ $( () => {
     if (md_last_modified > md_last_post_ctx && !confirm('内容已改，要放弃保存吗？'))
       return;
     
-    let tm = Math.floor((new Date()).valueOf() / 1000);
+    let tm = Math.floor((new Date()).getTime() / 1000);
     NAL.actionSign('close_locker',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
@@ -1195,7 +1172,7 @@ $( () => {
       else return 'UNKNOWN_ERROR';
     }, e => (console.log(e),'NETWORK_ERROR') ).then( data => {
       if (data?.result === 'OK') {
-        md_last_post_ctx = Math.floor((new Date()).valueOf() / 1000);
+        md_last_post_ctx = Math.floor((new Date()).getTime() / 1000);
         renewToolIcons(false);
       }
       else {
@@ -1211,7 +1188,7 @@ $( () => {
   });
   
   $('#md-txt-editor').on('change', ev => {
-    md_last_modified = Math.floor((new Date()).valueOf() / 1000);
+    md_last_modified = Math.floor((new Date()).getTime() / 1000);
     renewToolIcons(true);
   });
   
@@ -1219,7 +1196,7 @@ $( () => {
     if (NAL.role() != 'manager') return;
     if (markdown_info.opened) return alert('请先关锁，然后再发布');
     
-    let tm = Math.floor((new Date()).valueOf() / 1000);
+    let tm = Math.floor((new Date()).getTime() / 1000);
     NAL.actionSign('archive',Buffer.from(tm+'').toString('hex')).then(res => {
       if (!res || !res.signature) return alert('请求签名失败');
       
@@ -1309,7 +1286,7 @@ $( () => {
       let new_sdat = NAL.sessData();
       new_sdat[0] = canReauth? 127: 0;
       
-      let tm = Math.floor((new Date()).valueOf() / 1000);
+      let tm = Math.floor((new Date()).getTime() / 1000);
       let beSign = Buffer.concat([new_sdat,colonChar,psptHa,Buffer.from(':'+tm)]);
       NAL.actionSign('authority',beSign.toString('hex')).then( res2 => {
         if (typeof res2 == 'string') {
@@ -1391,7 +1368,7 @@ $( () => {
   }).on('keypress', ev => {
     if (!ev.target.getAttribute('readonly') && textSaveButton.hasClass('disabled')) {
       setTimeout(() => {
-        md_last_modified = Math.floor((new Date()).valueOf() / 1000);
+        md_last_modified = Math.floor((new Date()).getTime() / 1000);
         renewToolIcons(true);
       }, 300);
     }

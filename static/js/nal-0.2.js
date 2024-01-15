@@ -1,221 +1,139 @@
 // nal.js -- NBC Account Library
-// by Wayne Chan, 2022 ~ 2023
+// by Wayne Chan, 2022 ~ 2024
 
 const NAL = ( function() {
 
-let accFrameNode = null;
+const NAL_BUFF_SIZE = 16;
 
-let sw_call_idx_ = 0;
-let sw_call_buf_ = []; // waiting buffer for NAL_.call_()
+var sw_call_idx_ = 0;
 
-let app_version_  = null;
-let app_abnormal_ = '';
+var sw_magic_   = null;
+var sw_channel_ = {};   // { strategy_ver, host }
+var sw_storage_ = null;
+var sw_verInfo_ = null;
 
-let sw_magic_ = null;
-let sw_channel_ = {};   // { strategy_ver, host }
-
-let sw_notifies_ = {
-  ver_info(param) {
-    app_version_ = param[0];
-    if (app_version_ === null)
-      app_abnormal_ = param[1]+''; // can be: none, installing, installed, activating, activated, redundant
-    else app_abnormal_ = '';
-  },
-};
+var _msg_buff = [];
 
 window.addEventListener('message', function(ev) {
-  if (ev.source !== accFrameNode?.contentWindow) {
-    if (ev.data.slice(0,10) == 'CHAN_INFO:') {
-      let s = ev.data.slice(10);
-      let idx = s.indexOf(':');
-      if (idx > 0) {
-        sw_magic_ = parseInt(s.slice(0,idx)) || 0;
-        try {
-          sw_channel_ = JSON.parse(s.slice(idx+1));
-        }
-        catch(e) {
-          console.log(e);
-        }
-      }
+  if (ev.source === window && typeof ev.data == 'string' && ev.data.slice(0,8) === 'NAL_RPY:') {
+    try {
+      let obj = JSON.parse(ev.data.slice(8));
+      _msg_buff.push([obj.id || 0,obj.result]);
+      while (_msg_buff.length > NAL_BUFF_SIZE) _msg_buff.shift();
     }
-    return;
-  }
-  
-  let msg = JSON.parse(ev.data), msg_id = msg.id;
-  if (typeof msg_id == 'number') {
-    for (let i=0,item; item=sw_call_buf_[i]; i++) {
-      if (item[0] === msg_id) {
-        sw_call_buf_.splice(i,1); // remove from calling buffer
-        if (typeof msg.error == 'string')
-          item[2](new Error(msg.error)); // reject(err)
-        else item[1](msg);        // resove({id,result})
-        break;
-      }
-    }
-  }
-  else if (typeof msg.notify == 'string') {
-    let fn = sw_notifies_[msg.notify];
-    if (fn) fn(msg.param || []);
+    catch(e) {}
   }
 });
 
-let NAL_ = {
-  verInfo(info) { // reconstruct json to avoid side effects
-    if (info) {
-      app_version_ = JSON.parse(JSON.stringify(info));
-      app_abnormal_ = '';
-    }
-    return app_version_? JSON.parse(JSON.stringify(app_version_)): null;
-  },
-  
-  swMagic(magic, callback) {
-    if (magic === undefined)
-      return sw_magic_;
+const _NAL = {
+  // NAL.call_(cmd,param).then(res => console.log(res))
+  //   .catch(err => console.log(err))
+  //   .finally(() => console.log('finally do something'))
+  call_(cmd, param, wait) {
+    sw_call_idx_ += 1;
+    let new_id = sw_call_idx_;
+    if (!wait) wait = 5000;  // default max wait 5 seconds
     
-    sw_magic_ = null;
-    if (magic === null)
-      return null;
-    
-    let nd = document.createElement('a');
-    nd.setAttribute('href',accFrameNode.getAttribute('src'));
-    let loc = nd.origin + '/account/api/online/regist_magic?magic=' + magic;
-    let frmNode = document.createElement('iframe');
-    frmNode.setAttribute('style','display:none');
-    frmNode.setAttribute('src',loc);
-    document.body.appendChild(frmNode);
-    
-    let counter = 0;
-    let tid = setInterval( () => {
-      counter += 1;
-      if (sw_magic_ !== null || counter > 30) {  // max wait 9 seconds
-        clearInterval(tid);
-        frmNode.remove();
-        if (callback) callback(sw_magic_);
-      }
-    }, 300);
-  },
-  
-  swHost() {
-    return sw_channel_.host || 'account.nb-chain.cn';
-  },
-  
-  strategyVer() {
-    return sw_channel_.strategy_ver || 0;
-  },
-  
-  waitReady(wait) {
-    let resolve_fn = null, reject_fn = null;
-    let wait_ready = new Promise( (resolve,reject) => {
+    let resolve_fn, reject_fn;
+    let waitObj = new Promise( (resolve, reject) => {
       resolve_fn = resolve;
       reject_fn = reject;
     });
     
-    let waitNum = wait || 60;  // default wait 60 seconds
-    let ticks = 0, tid = setInterval( () => {
-      if (app_version_) {
-        app_abnormal_ = '';
-        clearInterval(tid);
-        resolve_fn(NAL_.verInfo());
+    let counter = 0;
+    let taskId = setInterval( () => {
+      counter += 250;
+      if (counter >= wait) {
+        clearInterval(taskId);
+        console.log('NAL request timeout: ' + cmd);
+        reject_fn(new Error('TIMEOUT'));
       }
       else {
-        if (app_abnormal_) { // state changed
-          clearInterval(tid);
-          resolve_fn(app_abnormal_);
-        }
-        else {
-          ticks += 1;
-          if (ticks > waitNum) {
-            clearInterval(tid);
-            reject_fn(new Error('TIMEOUT'));
+        let succ = false, found = null, oldest = new_id - 128;
+        for (let i=_msg_buff.length-1; i >= 0; i--) {
+          let item = _msg_buff[i], itemId = item[0];
+          if (itemId === new_id) {
+            _msg_buff.splice(i,1);
+            found = item[1];
+            succ = true;
           }
-          // else, continue checking
+          else if (itemId < oldest)
+            _msg_buff.splice(i,1);  // remove too old reply item
+        }
+        
+        if (succ) {
+          clearInterval(taskId);
+          resolve_fn(found);
         }
       }
-    }, 1000);
-    
-    return wait_ready;
-  },
-  
-  renewState() {
-    // renew bridge state, auto cache if nesseary, wait ready for restore hosting
-    accFrameNode.contentWindow.postMessage('RENEW','*');
-  },
-  
-  unregist() {
-    navigator.serviceWorker.getRegistrations().then( items => {
-      let reg = null;
-      for (let i=0,item; item=items[i]; i++) {
-        if (item.active && item.active.scriptURL.indexOf('/api/sw-') > 0) {
-          reg = item;
-          break;
-        }
-      }
-      if (!reg) {
-        console.log('no active SW found.');
-        return;
-      }
-      
-      if (app_version_) {
-        NAL_.call_('clear_cache').then( res => {
-          console.log('clear cache ' + res);
-          tryUnregist(reg);
-        });
-      }
-      else tryUnregist(reg);
-    });
-    
-    function tryUnregist(reg) {
-      reg.unregister().then( is_succ => {
-        if (is_succ)
-          alert('已提交 service worker 注销操作，请刷新本页，或重启浏览器使之生效。');
-        else alert('注销 service worker 失败');
-      });
-    }
-  },
-  
-  registNoti(name, callback) {  // callback(param), when callback is null means remove
-    if (callback === null)
-      delete sw_notifies_[name];
-    else sw_notifies_[name] = callback;
-  },
-  
-  call_(cmd, param, wait) {
-    if (sw_call_buf_.length > 16) throw Error('SW_CALL_BUSY');
-    
-    sw_call_idx_ += 1;
-    let new_id = sw_call_idx_;
-    let msg_caller = new Promise( (resolve,reject) => {
-      sw_call_buf_.push([new_id,resolve,reject])
-    });
+    }, 250);
     
     if (!param) param = [];
-    accFrameNode.contentWindow.postMessage(JSON.stringify({id:new_id,cmd,param}),'*');
+    window.postMessage('NAL_REQ:'+JSON.stringify({id:new_id,cmd,param}));
     
-    let abort_fn = null;
-    let abortable = Promise.race([ msg_caller,
-      new Promise( function(resolve, reject) {
-        abort_fn = function() { reject(new Error('TIMEOUT')) };
-      })
-    ]);
-    setTimeout(()=>abort_fn(),wait||5000); // default wait 5 seconds
+    return waitObj;
+  },
+  
+  verInfo(info) { // reconstruct json to avoid side effects
+    if (info) sw_verInfo_ = info;  // set ver info
+    return sw_verInfo_;
+  },
+  
+  swMagic(callback, magic, wait) {
+    let oldValue = sw_magic_;
+    if (!callback) {   // read sw_magic_
+      if (typeof magic == 'number')
+        sw_magic_ = magic;
+      return oldValue;
+    }
+    // else, reset sw_magic_
     
-    return abortable.then( res => res.result, e => {
-      for (let i=0,item; item=sw_call_buf_[i]; i++) {
-        if (item[0] == new_id) {
-          sw_call_buf_.splice(i,1);  // remove from calling buffer
-          break;
-        }
-      }
-      return e.message || 'UNKNOWN'; // maybe 'TIMEOUT', maybe res.error
+    sw_magic_ = null;
+    _NAL.call_('regist_magic',null,wait || 5000).then( res => {  // default max wait 5 seconds
+      sw_magic_ = res.sw_magic;
+      sw_channel_ = { strategy_ver:res.strategy_ver, host:res.host };
+      sw_storage_ = res.storage;
+      sw_verInfo_ = res.ver_info;
+      callback(sw_magic_);
+    }).catch(err => callback(null));
+    
+    return oldValue;
+  },
+  
+  swHost() {
+    return sw_channel_.host || '';
+  },
+  
+  strategyVer() {
+    return sw_channel_.strategy_ver;  // null means not ready
+  },
+  
+  swStorage() {
+    return sw_storage_;
+  },
+  
+  waitReady(wait) {
+    let resolve_fn, reject_fn;
+    let waitObj = new Promise( (resolve, reject) => {
+      resolve_fn = resolve;
+      reject_fn = reject;
     });
+    
+    _NAL.swMagic( magic => {
+      if (magic === null)
+        reject_fn(new Error('FAILED'));
+      else resolve_fn(sw_verInfo_);
+    }, wait);
+    
+    return waitObj;
   },
 };
 
 let inDlgShowing = false;
 
-NAL_.dialogShowing = function() { return inDlgShowing; };
+_NAL.dialogShowing = function() { return inDlgShowing; };
 
-NAL_.dialog = ( () => {
+_NAL.dialog = ( () => {
 
 function noResponse(e) {
   e.stopPropagation();
@@ -251,8 +169,7 @@ return ( (name,args) => {
     });
   }
   
-  let magic = NAL_.swMagic();
-  if (typeof magic != 'number') {
+  if (typeof _NAL.swMagic() != 'number') {
     return new Promise( function(resolve, reject) {
       reject(new Error('CANCELED'));
     });
@@ -275,7 +192,7 @@ return ( (name,args) => {
       hintDialog = document.createElement('div');
       hintDialog.setAttribute('name','dlg-hint');
       hintDialog.setAttribute('style','display:none; background:white; position:relative; width:360px; left:calc(50% - 180px); top:68px; border-radius:0.25rem;');
-      hintDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">待授权</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div style="border:solid rgba(0,0,0,0.2); border-width:1px 0; padding:1.25rem;"><p style="margin: 0.75rem 0 1rem">请到 NAL 账号管理器主页实施授权，或借助 chrome 浏览器插件完成授权。</p></div>';
+      hintDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">待授权</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div style="border:solid rgba(0,0,0,0.2); border-width:1px 0; padding:1.25rem;"><p style="margin: 0.75rem 0 1rem">请在 chrome 浏览器插件（NalPass）完成授权。</p></div>';
       maskNode.appendChild(hintDialog);
       
       let node = hintDialog.querySelector('button[name="btn-cancel"]');
@@ -286,41 +203,41 @@ return ( (name,args) => {
           clearInterval(nalCheckPassId);
           nalCheckPassId = 0;
           if (name == 'sign')
-            NAL_.call_('rmv_wait_sign',[NAL_.swHost(),NAL_.swMagic()]);
+            _NAL.call_('rmv_wait_sign',[_NAL.swMagic()]);
         }
-        if (name == 'sign') NAL_._accountNode.setAttribute('last-sign','0');
+        if (name == 'sign') document.body.setAttribute('nal-last-sign','0');
         closeDialog();
         nalDialogReject(new Error('CANCELED'));
       });
     }
     
-    let currHost = NAL_.swHost(), currMagic = NAL_.swMagic();
+    let currHost = _NAL.swHost(), currMagic = _NAL.swMagic();
     let now = Math.floor((new Date()).valueOf() / 1000);
     if (name == 'sign') {
       if (args && args.length) {  // add: realm, child, hex_tobe_sign
         // have 'realm' means waiting sign, while only 'currHost,currMagic,now' means query if signature be done
-        NAL_._accountNode.setAttribute('last-sign',now+'');
-        NAL_._accountNode.setAttribute('last-realm',args[0]+'');
+        document.body.setAttribute('nal-last-sign',now+'');
+        document.body.setAttribute('nal-last-realm',args[0]+'');
         
-        NAL_.call('pass_sign',[currHost,currMagic,now, ...args]).then( res => {
+        _NAL.call('pass_sign',[currMagic,now, ...args]).then( res => {
           if (res !== 'ADDED') {  // meet unexpected error
-            NAL_._accountNode.setAttribute('last-sign','0');
+            document.body.setAttribute('nal-last-sign','0');
             closeDialog();
             nalDialogReject(new Error('CANCELED'));
           }
-          else waitingSignPass([currHost,currMagic,now],args[0]);
+          else waitingSignPass([currMagic,now],args[0]);
         });
       }
       else { // error, nothing to sign
-        NAL_._accountNode.setAttribute('last-sign','0');
+        document.body.setAttribute('nal-last-sign','0');
         closeDialog();
         nalDialogReject(new Error('CANCELED'));
       }
     }
     else {
-      NAL_._accountNode.setAttribute('last-sign',now+'');
-      NAL_._accountNode.setAttribute('last-realm','@'); // '@' means only check account be ready in SW, no authority
-      waitingSwPass([currHost,currMagic,now]);
+      document.body.setAttribute('nal-last-sign',now+'');
+      document.body.setAttribute('nal-last-realm','@'); // '@' means only check account be ready in SW, no authority
+      waitingSwPass([currMagic]);
     }
     
     dialog = hintDialog;
@@ -397,14 +314,14 @@ return ( (name,args) => {
   
   function waitingSignPass(param, expected) {
     nalCheckPassId = setInterval( () => {
-      NAL_.call_('pass_sign',param,10000).then( res => {
+      _NAL.call_('pass_sign',param,10000).then( res => {
         if (res?.realm) {
           if (nalCheckPassId) {
             clearInterval(nalCheckPassId);
             nalCheckPassId = 0;
           }
           
-          NAL_._accountNode.setAttribute('last-sign','0');
+          document.body.setAttribute('nal-last-sign','0');
           closeDialog();
           if (res.realm === expected && res.signature)
             nalDialogResolve(res);  // {child,pubkey,realm,signature}
@@ -412,7 +329,7 @@ return ( (name,args) => {
         }
         // else, continue next loop, maybe wait forever
       }).catch( e => {  // meet unexpected error
-        NAL_._accountNode.setAttribute('last-sign','0');
+        document.body.setAttribute('nal-last-sign','0');
         closeDialog();
         nalDialogReject(new Error('CANCELED'));
       });
@@ -421,20 +338,20 @@ return ( (name,args) => {
   
   function waitingSwPass(param, expected) {
     nalCheckPassId = setInterval( () => {
-      NAL_.call_('config_acc').then( res => {
+      _NAL.call_('config_acc',param).then( res => {
         if (res !== 'WAIT_PASS') {
           if (nalCheckPassId) {
             clearInterval(nalCheckPassId);
             nalCheckPassId = 0;
           }
           
-          NAL_._accountNode.setAttribute('last-sign','0');
+          document.body.setAttribute('nal-last-sign','0');
           closeDialog();
           nalDialogResolve('PASSED');
         }
         // else, continue next loop, maybe wait forever
       }).catch( e => {  // meet unexpected error
-        NAL_._accountNode.setAttribute('last-sign','0');
+        document.body.setAttribute('nal-last-sign','0');
         closeDialog();
         nalDialogReject(new Error('CANCELED'));
       });
@@ -442,14 +359,14 @@ return ( (name,args) => {
   }
 });   // end of return xx
 
-})(); // assign to NAL_.dialog
+})(); // assign to _NAL.dialog
 
-NAL_.call = function(cmd, param, wait) {
-  return NAL_.call_(cmd,param,wait).then( res => {
+_NAL.call = function(cmd, param, wait) {
+  return _NAL.call_(cmd,param,wait).then( res => {
     if (res === 'WAIT_PASS') {
-      return NAL_.dialog('pass').then( res => { // death waiting result: passed or canceled
+      return _NAL.dialog('pass').then( res => { // death waiting result: passed or canceled
         if (res === 'PASSED')
-          return NAL_.call_(cmd,param,wait);
+          return _NAL.call_(cmd,param,wait);
         else throw Error('CANCELED');
       });
     }
@@ -457,9 +374,12 @@ NAL_.call = function(cmd, param, wait) {
   });
 };
 
+return _NAL;
+})();  // end of const NAL = (function() ...)
+
 //----
 
-( function() {  // SSI implement
+( function() {  // SSI implement, add APIs as NAL.xxx
 
 const ECDH = require('create-ecdh')('secp256k1');
 const CryptoJS = require('crypto-js');
@@ -518,7 +438,7 @@ function shuffle(arr) {
   }
 }
 
-NAL_.strategy = function(stg) {
+NAL.strategy = function(stg) {
   if (!stg) return STRATEGY;
   DEFAULT_PERIOD = session_periods[stg.session_type];
   DEFAULT_REFRESH = refresh_periods[stg.session_type];
@@ -530,12 +450,12 @@ NAL_.strategy = function(stg) {
     let passed = (new Date()).valueOf() - scanStart;
     if (passed > 90000) return clearInterval(scanId);  // max wait 90s
     
-    let magic = NAL_.swMagic();
-    let reportVer = NAL_.strategyVer();
+    let magic = NAL.swMagic();
+    let reportVer = NAL.strategyVer();
     let realVer = STRATEGY.strategy_ver;
     if (typeof magic == 'number' && reportVer && realVer) {
       if (reportVer !== realVer) {
-        NAL_.call_('save_strategy',[NAL_.swHost(),magic,STRATEGY]).then( data => {
+        NAL.call_('save_strategy',[magic,STRATEGY]).then( data => {
           if (data === 'OK')
             console.log('! strategy is changed from ' + reportVer + ' to ' + realVer);
         });
@@ -547,11 +467,11 @@ NAL_.strategy = function(stg) {
   return [stg,DEFAULT_PERIOD,DEFAULT_REFRESH,REFRESH_LIMIT];
 };
 
-NAL_.cryptoHost = function(renew) {
-  return NAL_.call_('last_cryptohost',[renew || false]);
+NAL.cryptoHost = function(renew) {
+  return NAL.call_('last_cryptohost',[renew || false]);
 };
 
-NAL_.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow) {
+NAL.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow) {
   if (refresh_task) {
     if (role === currRole && nonce1 === clientNonce && nonce2 === serverNonce.toString() && beg === refresh_beg)
       return false; // no change, do nothing 
@@ -588,7 +508,7 @@ NAL_.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow)
           clearInterval(refresh_task);  // stop interval task
           refresh_task = 0;
         }
-        NAL_.doLogout();
+        NAL.doLogout();
         return;
       }
       
@@ -612,7 +532,7 @@ NAL_.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow)
               clearInterval(refresh_task);  // stop interval task
               refresh_task = 0;
             }
-            NAL_.doLogout();
+            NAL.doLogout();
           }
           return console.log('request refresh token failed');
         }
@@ -624,22 +544,22 @@ NAL_.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow)
   }, 30000); // checking every 30 seconds
 };
   
-NAL_.role = function() {
+NAL.role = function() {
   if (!refresh_task) return '';  // SSI refresh task not started, or expired
   return clientNonce? currRole: '';
 };
 
-NAL_.sessData = function() {
+NAL.sessData = function() {
   return lastSessData;
 };
 
-NAL_.loginSess = function() {
+NAL.loginSess = function() {
   let size = lastSessData[1];
   let session = lastSessData.slice(2,2+size);
   return base36.encode(session); // maybe ''
 };
 
-NAL_.token = function() {
+NAL.token = function() {
   // step 1: check whole expired or not
   let tm = Math.floor((new Date()).valueOf() / 1000);
   if (tm >= max_refresh_tm) return '';  // failed too when max_refresh_tm is default 0-value
@@ -672,7 +592,7 @@ NAL_.token = function() {
   return 'SSI-SIGN token=' + tok.toString('base64');
 };
 
-NAL_.logout = function() {
+NAL.logout = function() {
   if (refresh_task) {
     clearInterval(refresh_task);  // stop interval task
     refresh_task = 0;
@@ -694,23 +614,23 @@ NAL_.logout = function() {
   localStorage.setItem('sw_magic_time','0');
 };
 
-NAL_.getPassport = function(is_meta) {
-  return NAL_.call('get_pspt',[NAL_.swHost(),NAL_.swMagic(),is_meta],40000); // max waiting 40 seconds
+NAL.getPassport = function(is_meta) {
+  return NAL.call('get_pspt',[NAL.swMagic(),is_meta],40000); // max waiting 40 seconds
 };
 
-NAL_.doLogout = function() {
-  NAL_.call('did_logout',[NAL_.swHost(),NAL_.swMagic()]).then( res => {
+NAL.doLogout = function() {
+  NAL.call('did_logout',[NAL.swMagic()]).then( res => {
     if (res === 'OK') {
-      NAL_.logout();
-      NAL_.afterLogout();
+      NAL.logout();
+      NAL.afterLogout();
     }
   });
 };
 
-NAL_.afterLogout = function() {}; // waiting overwrite
+NAL.afterLogout = function() {}; // waiting overwrite
 
-NAL_.actionSign = function(action, hexBeSign, realmEx) { // checker: undefined 'pass' 'sign' 'rsvd' 'auto'
-  let role = NAL_.role();
+NAL.actionSign = function(action, hexBeSign, realmEx) { // checker: undefined 'pass' 'sign' 'rsvd' 'auto'
+  let role = NAL.role();
   if (!role)
     return new Promise( (resolve,reject) => resolve('NOT_LOGIN') );
   
@@ -740,55 +660,28 @@ NAL_.actionSign = function(action, hexBeSign, realmEx) { // checker: undefined '
   
   let realm = role + '+' + action + (realmEx? ('+'+realmEx): '');
   if (needRsvd) {
-    return NAL_.call('list_rsvd').then( rsvdList => {
+    return NAL.call('list_rsvd').then( rsvdList => {
       if (!(rsvdList instanceof Array) || !rsvdList.length) // unexpected error
         throw new Error('CANCELED');
       
       shuffle(rsvdList); // rsvdList must be an Array
-      return NAL_.dialog('rsvd',rsvdList).then( rsvd => {
+      return NAL.dialog('rsvd',rsvdList).then( rsvd => {
         let now = Math.floor((new Date()).valueOf() / 1000);
-        return NAL_.call( 'pass_sign', [
-          NAL_.swHost(),NAL_.swMagic(),now,realm,0, // child=0 means choose login account
+        return NAL.call( 'pass_sign', [
+          NAL.swMagic(),now,realm,0, // child=0 means choose login account
           hexBeSign,rsvd ] );
       });
     });
   }
   else if (needPass) {
-    return NAL_.dialog('sign',[realm,0,hexBeSign]);
+    return NAL.dialog('sign',[realm,0,hexBeSign]);
   }
   else {  // sign directly
     let now = Math.floor((new Date()).valueOf() / 1000);
-    return NAL_.call( 'pass_sign', [
-      NAL_.swHost(),NAL_.swMagic(),now,realm,0, // child=0 means choose login account
+    return NAL.call( 'pass_sign', [
+      NAL.swMagic(),now,realm,0, // child=0 means choose login account
       hexBeSign ] );
   }
 };
 
 })(); // end of SSI implement
-
-setTimeout( () => {
-  let s = document.body.dataset.nal_domain || 'fn-share.github.io';
-  s = 'https://' + s + '/account/api/last/bridge.html';
-  
-  accFrameNode = document.querySelector('#nbc-account');
-  if (!accFrameNode || accFrameNode.nodeName != 'IFRAME') {
-    accFrameNode = document.createElement('iframe');
-    accFrameNode.setAttribute('id','nbc-account');
-    accFrameNode.setAttribute('style','display:none');
-    accFrameNode.setAttribute('src',s);
-    document.body.appendChild(accFrameNode);
-  }
-  else {
-    s = accFrameNode.dataset.src || s;  // try 'data-src' attribute first
-    accFrameNode.setAttribute('src',s); // assign src after message listen started
-  }
-  
-  NAL_._accountNode = accFrameNode;
-}, 600);
-
-NAL_.nalDomain = function() {
-  return document.body.dataset.nal_domain || 'fn-share.github.io';
-};
-
-return NAL_;
-})();

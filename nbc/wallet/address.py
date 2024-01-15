@@ -120,8 +120,8 @@ class Address(object):
       self._vcn = vcn
     else: self._vcn = int(vcn) & 0xffff
     
-    # public address
-    self._address = util.key.publickey_to_address(self.publicKey(),self._vcn,ver=self._ver)
+    # public address, according to uncompressed
+    self._address = util.key.publickey_to_address(self._pub_key,self._vcn,ver=self._ver)
   
   def address(self):
     return self._address
@@ -137,7 +137,7 @@ class Address(object):
   def _priv_key_(self):
     if self._priv_key is None:
       return None
-    return util.key.privkey_from_wif(self.priv_key)  # the binary representation of private
+    return util.key.privkey_from_wif(self._priv_key)  # the binary representation of private
   
   def fingerprint(self):
     return hash160(self.publicKey())[:4]

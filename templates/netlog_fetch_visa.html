@@ -71,7 +71,7 @@ function wait__(promise_obj, wait) {
   return abortable_promise;
 }
 
-function getVisaCard(retry_num, visaId, callback, option) {
+function getVisaCard(retry_num, visaId, callback) {
   wait__(fetch('../login/visa/'+visaId,option),10000).then( res => {
     if (res.status == 200)
       return res.json();
@@ -81,7 +81,7 @@ function getVisaCard(retry_num, visaId, callback, option) {
     return null;
   }, e => {  // e.message such like 'TIMEOUT'
     if (retry_num)
-      getVisaCard(retry_num-1,callback,option);
+      getVisaCard(retry_num-1,visaId,callback);
     else {
       if (callback) callback(null);
     }
