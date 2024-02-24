@@ -3,9 +3,8 @@
 import logging
 logger = logging.getLogger(__name__)
 
-import os, traceback
-import time, random, hashlib, base64, hmac, re, struct
-from binascii import hexlify, unhexlify
+import os, time, random, hashlib, base64, hmac, struct, traceback
+from binascii import unhexlify
 from flask import request, make_response
 
 from . import app
@@ -17,10 +16,15 @@ from nbc.util.ecdsa.util import number_to_string, string_to_number
 from nbc.wallet.hdwallet import point_decompress
 from nbc.util.pyaes.aes import AESModeOfOperationCBC as AES
 
-_route_prefix = os.environ.get('ROUTE_PREFIX','')
+from .plt_dataset import gncd_verify_plt, plt_dataset_init
 
-_platform_pubkey = b''
-_product_pubkey  = b''
+WEBSITE_REALM = os.environ.get('WEB_REALM','localhost:3000').encode('utf-8')
+WEBSITE_NONCE = os.environ.get('WEB_NONCE','WEBSITE_SECRET').encode('utf-8')  # for session control
+
+_tee_mono_pubkey = b''
+_last_mono_priv  = 0
+
+_strategy = {}
 
 def ripemd_hash(s):
   return hashlib.new('ripemd160',hashlib.sha256(s).digest()).digest()
@@ -100,27 +104,21 @@ def decrypt_arg(data, k_iv):
   aes = AES(k_iv[:16],k_iv[16:32])
   return b''.join(aes.decrypt(data[i:i+16]) for i in range(0,n,16))
 
-_last_mono_priv = 0
-
 def mono_encrypt(msg16):
   global _last_mono_priv
   
   if not _last_mono_priv:
     while True:
       temp_priv = random.randrange(curve.order>>16,curve.order)
-      flag,_,_ = gen_ecdh_key(_platform_pubkey,temp_priv)
+      flag,_,_ = gen_ecdh_key(_tee_mono_pubkey,temp_priv)
       if flag == 0:  # we only choose flag==0, ignore flag==1
         _last_mono_priv = temp_priv
         break
   
-  _,nonce_x,k_iv_plt = gen_ecdh_key(_platform_pubkey,_last_mono_priv)
-  _,_,k_iv_pdt = gen_ecdh_key(_product_pubkey,_last_mono_priv)
-  return nonce_x + encrypt_arg(encrypt_arg(msg16,k_iv_plt),k_iv_pdt)
+  _,nonce_x,k_iv = gen_ecdh_key(_tee_mono_pubkey,_last_mono_priv)
+  return nonce_x + encrypt_arg(msg16,k_iv)
 
 #----
-
-WEBSITE_REALM = os.environ.get('WEB_REALM','localhost:3000').encode('utf-8')
-WEBSITE_NONCE = os.environ.get('WEB_NONCE','WEBSITE_SECRET').encode('utf-8')  # for session control
 
 # 6m, 15m, 30m, 1h, 3h, 8h, 1d, 7d
 session_periods = (360,900,1800,3600,10800,28800,86400,604800)
@@ -142,6 +140,7 @@ TAG_CERT_EXPIRED  = 0xcb
 TAG_NOW_TIME      = 0xcc
 TAG_SEED_SECRET   = 0xce
 TAG_MAX_AUTH_TIME = 0xcf
+TAG_HW_VERIFYCODE = 0xde
 TAG_SIGNATURE     = 0xdf
 
 MAX_SESS_CACHE_NUM    = 8192
@@ -150,27 +149,18 @@ MIN_VISA_MINUTES      = 1440      # 1440 is 1 day
 MAX_VISA_MINUTES      = 10512000  # 10512000 is 20 years
 MAX_VISA_AUTH_MINUTES = 20160     # 20160 is 14 days
 
-_config   = {}
-_strategy = {}
-
 passport_tags = ( TAG_ACCOUNT, TAG_ROOTCODE, TAG_LOGIN_SESSION,
   TAG_REALM, TAG_ADMIN_FP, TAG_CERT_EXPIRED, TAG_NOW_TIME )
 greencard_tags = ( TAG_ROOTCODE, TAG_LOGIN_SESSION, TAG_REALM,
-  TAG_SESSION_DATA, TAG_ADMIN_FP, TAG_CERT_EXPIRED, TAG_NOW_TIME )
+  TAG_SESSION_DATA, TAG_ADMIN_FP, TAG_CERT_EXPIRED, TAG_NOW_TIME, TAG_HW_VERIFYCODE )
 
 app_server_secret = os.environ.get('APP_SECRET','change_it_please').encode('utf-8')  # for green card authority
 
-pspt_admin_acc = None
-pspt_admin_fp  = b''
+rsp_admin_acc = None
+rsp_admin_fp  = b''
 
 app_admin_acc = None
 app_admin_fp  = b''
-
-nbc_platform_acc = None
-nbc_platform_fp  = b''
-
-nbc_product_acc = None
-nbc_product_fp  = b''
 
 session_cache = {}  # { acc20:[time,mutable_num4,last_refresh_seg,last_nonce_crc3,last_token,session_data]}
 
@@ -202,7 +192,7 @@ def set_sess_cache(acc, mutable_num, refresh_seg, nonce_crc, tok, sess_data):
     except:
       logger.warning(traceback.format_exc())
 
-@app.route(_route_prefix+'/login/nonce', methods=['POST'])
+@app.route('/netlog/login/nonce', methods=['POST'])
 def post_netlog_login_nonce():
   try:
     # step 1: parse parameters
@@ -269,17 +259,12 @@ def post_netlog_login_nonce():
     # step 4: verify card signature
     card = card_ctx[:-2-len(sig)]
     if by_passport:
-      if card_dict[TAG_ADMIN_FP] != pspt_admin_fp or not pspt_admin_acc.verify_ex(card,sig,single=True,no_der=True):
+      if card_dict[TAG_ADMIN_FP] != rsp_admin_fp or not rsp_admin_acc.verify_ex(card,sig,single=True,no_der=True):
         return ('INVALID_CARD',400)
     else:
       fp = card_dict[TAG_ADMIN_FP]
-      if fp == nbc_platform_fp:
-        if not nbc_platform_acc.verify_ex(card,sig,single=True,no_der=True):
-          return ('INVALID_CARD',400)
-      elif fp == nbc_product_fp:
-        if not nbc_product_acc.verify_ex(card,sig,single=True,no_der=True):
-          return ('INVALID_CARD',400)
-      else: return ('INVALID_CARD',400)
+      if not gncd_verify_plt(fp,card,sig):
+        return ('INVALID_CARD',400)
     
     # step 5: check card time
     now_min = tm // 60
@@ -348,7 +333,8 @@ def post_netlog_login_nonce():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-_re_whites  = re.compile(r'\s+')
+import re
+_re_whites = re.compile(r'\s+')
 
 def _split_assign(s):
   i = s.find('=')
@@ -375,7 +361,7 @@ def verify_auth(sid, sdat, auth):
   mutable_num4 = sid[20:24]
   limit_num = ord(mutable_num4[:1])
   now = int(time.time())
-  refresh_beg = int(hexlify(mutable_num4[1:]),16)
+  refresh_beg = int.from_bytes(mutable_num4[1:],'big')
   refresh_end = now // DEFAULT_REFRESH
   if refresh_end - refresh_beg > limit_num: return False  # login expired
   
@@ -416,7 +402,7 @@ def verify_auth(sid, sdat, auth):
     cache_info[2:6] = [refresh_end,nonce_crc,token,sdat]
   return True
 
-@app.route(_route_prefix+'/login/refresh', methods=['POST'])
+@app.route('/netlog/login/refresh', methods=['POST'])
 def post_netlog_login_refresh():
   try:
     # step 1: parse client_nonce and check client time
@@ -437,7 +423,7 @@ def post_netlog_login_refresh():
     role = sid[27:]
     
     limit_num = ord(mutable_num4[:1])
-    refresh_beg = int(hexlify(mutable_num4[1:]),16)
+    refresh_beg = int.from_bytes(mutable_num4[1:],'big')
     refresh_now = tm // DEFAULT_REFRESH
     if refresh_now > refresh_beg + limit_num:
       return ('OVERTIME',401)
@@ -487,7 +473,7 @@ def post_netlog_login_refresh():
 _cached_visa = {}  # {b36hash:(tm,card)}
 _cached_visa_check_at = int(time.time())
 
-@app.route(_route_prefix+'/login/authority', methods=['POST'])
+@app.route('/netlog/login/authority', methods=['POST'])
 def post_netlog_login_authority():
   global _cached_visa_check_at
   
@@ -550,7 +536,7 @@ def post_netlog_login_authority():
       return ('INVALID_TARGET',400)
     
     card = pspt[:-2-len(sig)]
-    if pspt_dict[TAG_ADMIN_FP] != pspt_admin_fp or not pspt_admin_acc.verify_ex(card,sig,single=True,no_der=True):
+    if pspt_dict[TAG_ADMIN_FP] != rsp_admin_fp or not rsp_admin_acc.verify_ex(card,sig,single=True,no_der=True):
       return ('INVALID_PASSPORT',400)
     
     # step 4: check self signature
@@ -603,7 +589,7 @@ def post_netlog_login_authority():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/login/visa/<card_hash>')
+@app.route('/netlog/login/visa/<card_hash>')
 def get_netlog_login_visa(card_hash):
   try:
     info = _cached_visa.get(card_hash)
@@ -617,26 +603,17 @@ def get_netlog_login_visa(card_hash):
 #----
 
 def ssi_login_init(config):
-  global _config, _strategy
-  _config = config
+  manager_site = config.get('tee_manager_site','')   # http or https
+  assert manager_site[:4] == 'http', 'invalid config.tee_manager_site'
+  plt_dataset_init(manager_site)
+  
+  global _tee_mono_pubkey, _strategy
   _strategy = config['strategy']
+  _tee_mono_pubkey = unhexlify(config['tee_mono_pubkey'])
   
-  global _platform_pubkey, _product_pubkey
-  _platform_pubkey = unhexlify(config['nbc_platform_pubkey'])
-  _product_pubkey  = unhexlify(config['nbc_product_pubkey'])
-  
-  global nbc_platform_acc, nbc_platform_fp
-  nbc_platform_acc = wallet.Address(pub_key=_platform_pubkey);
-  nbc_platform_fp  = ripemd_hash(_platform_pubkey)[:4]
-  
-  global nbc_product_acc, nbc_product_fp
-  nbc_product_acc = wallet.Address(pub_key=_product_pubkey);
-  nbc_product_fp  = ripemd_hash(_product_pubkey)[:4]
-  
-  global pspt_admin_acc, pspt_admin_fp
-  pspt_admin_pub = unhexlify(config['real_admin_pubkey'])
-  pspt_admin_acc = wallet.Address(pub_key=pspt_admin_pub)
-  pspt_admin_fp  = ripemd_hash(pspt_admin_pub)[:4]
+  global rsp_admin_acc, rsp_admin_fp
+  rsp_admin_acc = wallet.Address(pub_key=unhexlify(config['rsp_admin_pubkey']))
+  rsp_admin_fp  = ripemd_hash(rsp_admin_acc.publicKey())[:4]
   
   global app_admin_acc, app_admin_fp
   app_admin_acc = wallet.Address(priv_key=config['app_admin_wif'].encode('utf-8'))

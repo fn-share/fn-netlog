@@ -3,8 +3,8 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link href="/static/css/bootstrap.min.css" rel="stylesheet">
-<link href="/static/css/highlightjs.min.css" rel="stylesheet">
+<link href="css/bootstrap.min.css" rel="stylesheet">
+<link href="css/highlightjs.min.css" rel="stylesheet">
 <title>Netlog</title>
 </head>
 
@@ -352,36 +352,25 @@ svg.feather {
 }
 </style>
 
-<pre style="display:none" id="hidden-strategy">{{info.app_strategy}}</pre>
+<script src="js/jquery-3.6.0.slim.min.js"></script>
+<script src="js/highlight.min.js"></script>
+<script src="js/popper.min.js"></script>
+<script src="js/bootstrap.min.js"></script>
+<script src="js/markdown-it.min.js"></script>
+<script src="js/markdown-it-attrs.min.js"></script>
+<script src="js/markdown-it-task-lists.min.js"></script>
+<script src="js/qrcode.min.js"></script>
 
-<script src="/static/js/jquery-3.6.0.slim.min.js"></script>
-<script src="/static/js/highlight.min.js"></script>
-<script src="/static/js/popper.min.js"></script>
-<script src="/static/js/bootstrap.min.js"></script>
-<script src="/static/js/markdown-it.min.js"></script>
-<script src="/static/js/markdown-it-attrs.min.js"></script>
-<script src="/static/js/markdown-it-task-lists.min.js"></script>
-<script src="/static/js/qrcode.min.js"></script>
-
-<script src="/static/js/feather.min.js"></script>
+<script src="js/feather.min.js"></script>
 <script>feather.replace()</script>
 
-<script src="/static/js/nbc_base-0.1.min.js"></script>
-<script src="/static/js/nal-0.2.js"></script>
+<script src="js/nbc_base-0.1.min.js"></script>
+<script src="js/nal-0.2.js"></script>
 
 <script>
 const CreateHash = require('create-hash');
 const Buffer = require('safe-buffer').Buffer;
 const base36 = require('base-x')('0123456789abcdefghijklmnopqrstuvwxyz');
-
-const REAL_WEBSITE = '{{info.real_website}}';
-const APP_ADMIN_PUBKEY = '{{info.app_admin_pubkey}}';
-
-const STRATEGY_INFO = NAL.strategy(JSON.parse($('#hidden-strategy').text()));
-const STRATEGY = STRATEGY_INFO[0];
-const DEFAULT_PERIOD  = STRATEGY_INFO[1]; // sessType=1, 15m
-const DEFAULT_REFRESH = STRATEGY_INFO[2]; // sessType=1, 90m
-const REFRESH_LIMIT   = STRATEGY_INFO[3];
 
 const colonChar = Buffer.from(':');
 
@@ -390,6 +379,14 @@ const _msgboxModal = new bootstrap.Modal($('#msgbox-modal'),{backdrop:'static',k
 const _authorityModal = new bootstrap.Modal($('#authority-modal'),{backdrop:'static',keyboard:true});
 const _saveVisaModal = new bootstrap.Modal($('#save-visa-modal'),{backdrop:'static',keyboard:true});
 const _configModal = new bootstrap.Modal($('#config-modal'),{backdrop:'static',keyboard:true});
+
+var STRATEGY = {};
+var DEFAULT_PERIOD  = 900;  // sessType=1, 15m
+var DEFAULT_REFRESH = 5400; // sessType=1, 90m
+var REFRESH_LIMIT   = 14;
+
+var RSP_WEBSITE = '';
+var APP_ADMIN_PUBKEY = '';
 
 function htmlEscape(text) { 
   return text.replace(/[<>"&]/g, function(match, pos, originalText) { // "
@@ -484,7 +481,7 @@ function isValidRidFormat(s) {
 }
 
 function editingStat(retry_num, callback, option) {
-  let url = 'stat?tz=' + (new Date()).getTimezoneOffset();
+  let url = '/netlog/stat?tz=' + (new Date()).getTimezoneOffset();
   wait__(fetch(url,option),10000).then( res => {
     if (res.status == 200)
       return res.json();
@@ -508,7 +505,7 @@ function editingStat(retry_num, callback, option) {
 }
 
 function editingFetch(retry_num, callback, option) {
-  wait__(fetch('editing',option),10000).then( res => {
+  wait__(fetch('/netlog/editing',option),10000).then( res => {
     if (res.status == 200)
       return res.text();
     if (res.status == 401) localStorage.clear();
@@ -528,7 +525,7 @@ function editingFetch(retry_num, callback, option) {
 }
 
 function imgListFetch(retry_num, callback, option) {
-  wait__(fetch('images',option),10000).then( res => {
+  wait__(fetch('/netlog/images',option),10000).then( res => {
     if (res.status == 200)
       return res.json();
     if (res.status == 401) localStorage.clear();
@@ -712,7 +709,7 @@ function tempDisableBtn(targ) {
 
 function waitFetchVisa(cardId) {
   let lnkNode = document.createElement('a');
-  lnkNode.setAttribute('href','visa/' + cardId);
+  lnkNode.setAttribute('href','/netlog/visa/' + cardId);
   let url = lnkNode.href;
   
   $('#visa-share-url').val(url);
@@ -792,6 +789,24 @@ function initLoginCfg(lastRole, cards) {
   else collapseByPspt.show();
 }
 
+function getAppInfo(retry_num, callback) {
+  wait__(fetch('/netlog/app_info'),10000).then( res => {
+    if (res.status == 200) return res.json();
+    if (callback) callback(null);
+    return null;
+  }, e => {  // e.message such like 'TIMEOUT'
+    if (retry_num)
+      getAppInfo(retry_num-1,callback);
+    else {
+      if (callback) callback(null);
+    }
+    return null;
+  }).then( data => {
+    if (data === null) return;
+    if (callback) callback(data);
+  });
+}
+
 $( () => {
   NAL.waitReady(30).then( verInfo => {
     if (verInfo === null) {
@@ -807,29 +822,44 @@ $( () => {
   });
   
   function whenNalReady() {
-    // step 1: set SW magic
+    // step 1: regist SW magic
     NAL.swMagic( magic => {
-      if (NAL.strategyVer() !== 1)  // version mismatch
-        NAL.call_('save_strategy',[magic,STRATEGY]);
-      
-      // step 2: list cards
-      NAL.call('list_cards',[magic]).then( res => {
-        let cards = res instanceof Array? res: [];
-        
-        // step 3: init GUI
-        let role = localStorage.getItem('login_role');
-        initLoginCfg(role,cards);
-        
-        let now = Math.floor((new Date()).getTime() / 1000);
-        let tm = parseInt(localStorage.getItem('last_login') || 0);
-        let nonce1 = localStorage.getItem('client_nonce');
-        let nonce2 = localStorage.getItem('server_nonce');
-        let sessData = Buffer.from(localStorage.getItem('session_data') || '','hex');
-        if (tm && (now-tm) < DEFAULT_REFRESH*REFRESH_LIMIT && nonce1 && nonce2 && role) {  // already login
-          NAL.checkStart(role,nonce1,nonce2,sessData,tm,now,true);
-          whenSuccLogin();    // already login
+      // step 2: get app info: strategy, refresh period, site account
+      getAppInfo(2, info => {  // if failed try 2 more time
+        if (info === null) {
+          $(document.body).css('display','none');  // disable do more things
+          return alert('请求网站基础信息失败');
         }
-        else _loginModal.show();  // need re-login
+        
+        // step 3: check strategy
+        let strategyInfo = NAL.strategy(info.app_strategy,'/netlog/login/refresh');
+        STRATEGY = strategyInfo[0];
+        DEFAULT_PERIOD  = strategyInfo[1];
+        DEFAULT_REFRESH = strategyInfo[2];
+        REFRESH_LIMIT   = strategyInfo[3];
+        
+        RSP_WEBSITE = info.rsp_website;
+        APP_ADMIN_PUBKEY = info.app_admin_pubkey;
+        
+        // step 4: list cards
+        NAL.call('list_cards',[magic]).then( res => {
+          let cards = res instanceof Array? res: [];
+          
+          // step 5: init GUI
+          let role = localStorage.getItem('login_role');
+          initLoginCfg(role,cards);
+          
+          let now = Math.floor((new Date()).getTime() / 1000);
+          let tm = parseInt(localStorage.getItem('last_login') || 0);
+          let nonce1 = localStorage.getItem('client_nonce');
+          let nonce2 = localStorage.getItem('server_nonce');
+          let sessData = Buffer.from(localStorage.getItem('session_data') || '','hex');
+          if (tm && (now-tm) < DEFAULT_REFRESH*REFRESH_LIMIT && nonce1 && nonce2 && role) {  // already login
+            NAL.checkStart(role,nonce1,nonce2,sessData,tm,now,true);
+            whenSuccLogin();    // already login
+          }
+          else _loginModal.show();  // need re-login
+        });
       });
     });
   }
@@ -911,7 +941,7 @@ $( () => {
         
         let loginType = child.slice(0,5) == 'gncd:'? 'GREEN_CARD': 'META_PSPT';
         let body = {role,pubkey:res.pubkey,card:hexContent,nonce_crc:nonceCrc3.toString('hex'),time:tm,signature:res.signature};
-        url_fetch('login/nonce', data => {
+        url_fetch('/netlog/login/nonce', data => {
           if (!data || !data.nonce) return alert('登录失败，请稍候再试');
           
           let sessData = data.session_data || '';
@@ -1011,7 +1041,7 @@ $( () => {
       }
       
       let body = {auto_publish:next_auto,time:tm,tz:(new Date()).getTimezoneOffset(),signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('auto_publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('/netlog/auto_publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -1075,7 +1105,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,tz:(new Date()).getTimezoneOffset(),action:'open_locker',signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('/netlog/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401) {
@@ -1124,7 +1154,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,tz:(new Date()).getTimezoneOffset(),action:'close_locker',signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('/netlog/locker',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -1164,7 +1194,7 @@ $( () => {
       return alert('内容未修改，不必提交保存');
     
     let body = '{"content":"' + Buffer.from($('#md-txt-editor').val()).toString('base64') + '"}';
-    wait__(fetch('editing',{method:'POST',body,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+    wait__(fetch('/netlog/editing',{method:'POST',body,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
       if (res.status == 200)
         return res.json();
       else if (res.status == 401 || res.status == 400)
@@ -1201,7 +1231,7 @@ $( () => {
       if (!res || !res.signature) return alert('请求签名失败');
       
       let body = {time:tm,tz:(new Date()).getTimezoneOffset(),signature:res.signature,pubkey:res.pubkey};
-      wait__(fetch('publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+      wait__(fetch('/netlog/publish',{method:'POST',body:JSON.stringify(body),headers:{'X-Authority':NAL.token()}}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401 || res.status == 400)
@@ -1257,7 +1287,7 @@ $( () => {
     $('#btn-create-visa .spinner-border').removeClass('d-none');
     
     let canReauth =$('#check-can-reauth').prop('checked');
-    let url = REAL_WEBSITE + '/cards/pspt/' + authTarg;
+    let url = RSP_WEBSITE + '/rsp/pspt/' + authTarg;
     wait__(fetch(url,{method:'GET',referrerPolicy:'no-referrer'}),30000).then( res => {
       if (res.status == 200)
         return res.json();
@@ -1299,7 +1329,7 @@ $( () => {
           session_data:new_sdat.toString('hex'), pubkey:res2.pubkey,
           signature:res2.signature, expire_minutes:expired_m };
         
-        wait__(fetch('login/authority',
+        wait__(fetch('/netlog/login/authority',
           {method:'POST',body:JSON.stringify(body),headers:{'X-Authority':token}}
         ),30000).then( res => {
           if (res.status == 200)
@@ -1385,7 +1415,7 @@ $( () => {
   
   function uploadOneImg(fname, ctx) {
     let token = NAL.token();
-    return wait__( fetch('res/'+fname,{method:'POST',
+    return wait__( fetch('/netlog/res/'+fname,{method:'POST',
       body:ctx,headers:{'X-Authority':NAL.token()}}),30000).then( res => {
       if (res.status == 200)
         return 'OK';
@@ -1395,7 +1425,7 @@ $( () => {
   
   function removeOneImg(fname) {
     let token = NAL.token();
-    return wait__( fetch('res/'+fname,{method:'DELETE',headers:{'X-Authority':NAL.token()}}),30000).then( res => {
+    return wait__( fetch('/netlog/res/'+fname,{method:'DELETE',headers:{'X-Authority':NAL.token()}}),30000).then( res => {
       if (res.status == 200)
         return 'OK';
       else return res.text();
@@ -1489,7 +1519,7 @@ $( () => {
             }
             else {  // upload new file
               _image_list.push(fname);
-              let html_str = `<div class="res-img-item"><div class="res-img-wrap"><img fname="${fname}" src="${ctx}"/></div><div class="res-img-wrap2"><img class="is-remove" src="/static/img/trash-2.svg"/>&nbsp;<img class="is-copy" src="/static/img/copy.svg"/></div></div>`;
+              let html_str = `<div class="res-img-item"><div class="res-img-wrap"><img fname="${fname}" src="${ctx}"/></div><div class="res-img-wrap2"><img class="is-remove" src="img/trash-2.svg"/>&nbsp;<img class="is-copy" src="img/copy.svg"/></div></div>`;
               $(html_str).insertBefore($('.res-img-item2'));
             }
             succ += 1;
@@ -1513,9 +1543,9 @@ $( () => {
     
     let html_str = '';
     _image_list.forEach( item => {
-      html_str += `<div class="res-img-item"><div class="res-img-wrap"><img fname="${item}" src="md/${loginSess}/res/${item}"/></div><div class="res-img-wrap2"><img class="is-remove" src="/static/img/trash-2.svg"/>&nbsp;<img class="is-copy" src="/static/img/copy.svg"/></div></div>`;
+      html_str += `<div class="res-img-item"><div class="res-img-wrap"><img fname="${item}" src="md/${loginSess}/res/${item}"/></div><div class="res-img-wrap2"><img class="is-remove" src="img/trash-2.svg"/>&nbsp;<img class="is-copy" src="img/copy.svg"/></div></div>`;
     });
-    html_str += '<div class="res-img-item2"><span><input type="file" accept="image/*" style="width:10px" id="input-img-file" multiple /><input type="text" style="width:10px" id="for-copy" readonly /></span><img src="/static/img/plus.svg"/></div>';
+    html_str += '<div class="res-img-item2"><span><input type="file" accept="image/*" style="width:10px" id="input-img-file" multiple /><input type="text" style="width:10px" id="for-copy" readonly /></span><img src="img/plus.svg"/></div>';
     
     let areaNode = $('#picture-preview-area');
     areaNode.html(html_str);

@@ -1,8 +1,9 @@
 # root/netlog.py
 
 import os, time, base64, json, traceback
-from binascii import hexlify, unhexlify
+from binascii import unhexlify
 from email.utils import formatdate
+from urllib.parse import quote
 
 import logging
 logger = logging.getLogger(__name__)
@@ -12,7 +13,8 @@ from flask import request, render_template
 
 from nbc import wallet
 from nbc.util import base36
-from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM, ssi_login_init
+
+from .ssi_login import verify_auth, ripemd_hash, refresh_periods, WEBSITE_REALM
 
 _data_dir = os.environ.get('LOCAL_DIR','./data')
 os.makedirs(_data_dir,exist_ok=True)
@@ -501,23 +503,22 @@ def rmv_img_file(login_sess, img_file):
 
 #----
 
-_route_prefix = os.environ.get('ROUTE_PREFIX','')
-
-_real_website = ''
+_rsp_website = ''
 _app_admin_pubkey = ''
-_app_strategy_str = '{}'
+_app_strategy = {}
 
 _locker_expired = 86400    # default is 1 day, would config as: refresh_period*(session_limit+1)
 
-@app.route(_route_prefix+'/')
-@app.route(_route_prefix+'/index.html')
-def netlog_index_page():
-  info = { 'real_website': _real_website,
-    'app_admin_pubkey': _app_admin_pubkey,
-    'app_strategy': _app_strategy_str }
-  return render_template('netlog_index.html',info=info)
+@app.route('/netlog/app_info')
+def netlog_info():
+  return {'rsp_website':_rsp_website,'app_admin_pubkey':_app_admin_pubkey,'app_strategy':_app_strategy}
 
-@app.route(_route_prefix+'/md/<login_sess>/res/<img_file>')
+@app.route('/netlog/')
+@app.route('/netlog/index.html')
+def netlog_index_page():
+  return ('',302,{'Location':'/static/netlog_index.html'})
+
+@app.route('/netlog/md/<login_sess>/res/<img_file>')
 def get_netlog_md_img(login_sess, img_file):
   try:
     mime_type = _img_types.get(os.path.splitext(img_file)[-1],'')
@@ -554,8 +555,8 @@ def get_netlog_md_img(login_sess, img_file):
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/md/<login_sess>/')
-@app.route(_route_prefix+'/md/<login_sess>/index.html')
+@app.route('/netlog/md/<login_sess>/')
+@app.route('/netlog/md/<login_sess>/index.html')
 def get_netlog_md(login_sess):
   try:
     info = get_publish_info(login_sess)
@@ -569,7 +570,7 @@ _cors_headers =  [ ('Access-Control-Allow-Origin','*'),
   ('Access-Control-Allow-Headers','*'),
   ('Access-Control-Allow-Credentials','true') ]
 
-@app.route(_route_prefix+'/md/<login_sess>/index.md')
+@app.route('/netlog/md/<login_sess>/index.md')
 def get_netlog_raw(login_sess):
   try:
     info = get_publish_info(login_sess,False)
@@ -578,11 +579,11 @@ def get_netlog_raw(login_sess):
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400,_cors_headers)
 
-@app.route(_route_prefix+'/visa/<card_hash>')
+@app.route('/netlog/visa/<card_hash>')
 def get_netlog_visa(card_hash):
   return render_template('netlog_fetch_visa.html',info={'hash':card_hash})
 
-@app.route(_route_prefix+'/stat')
+@app.route('/netlog/stat')
 def get_netlog_stat():
   try:
     # step 1: check SSI token
@@ -601,13 +602,13 @@ def get_netlog_stat():
     tz = int(request.args.get('tz','-480')) * 60
     opened, desc, auto_pub = get_editing_info(login_sess2,tz)
     
-    return { 'path':'md/'+login_sess2, 'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
+    return { 'path':'/netlog/md/'+login_sess2, 'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
   
   except:
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/editing', methods=['GET','POST'])
+@app.route('/netlog/editing', methods=['GET','POST'])
 def do_netlog_editing():
   try:
     # step 1: check SSI token
@@ -646,7 +647,7 @@ def do_netlog_editing():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/locker', methods=['POST'])
+@app.route('/netlog/locker', methods=['POST'])
 def post_netlog_locker():
   try:
     # step 1: check SSI token
@@ -699,7 +700,7 @@ def post_netlog_locker():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/auto_publish', methods=['POST'])
+@app.route('/netlog/auto_publish', methods=['POST'])
 def post_netlog_auto_publish():
   try:
     # step 1: check SSI token
@@ -753,7 +754,7 @@ def post_netlog_auto_publish():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/publish', methods=['POST'])
+@app.route('/netlog/publish', methods=['POST'])
 def post_netlog_publish():
   try:
     # step 1: check SSI token
@@ -807,7 +808,7 @@ def post_netlog_publish():
 
 #----
 
-@app.route(_route_prefix+'/images')
+@app.route('/netlog/images')
 def get_netlog_images():
   try:
     # step 1: check SSI token
@@ -829,7 +830,7 @@ def get_netlog_images():
     logger.warning(traceback.format_exc())
   return ('FORMAT_ERROR',400)
 
-@app.route(_route_prefix+'/res/<img_file>', methods=['GET','POST','DELETE'])
+@app.route('/netlog/res/<img_file>', methods=['GET','POST','DELETE'])
 def get_post_netlog_image(img_file):
   try:
     mime_type = _img_types.get(os.path.splitext(img_file)[-1],None)
@@ -876,14 +877,12 @@ def get_post_netlog_image(img_file):
 #----
 
 def netlog_init(config):
-  global _real_website, _app_admin_pubkey, _app_strategy_str
+  global _rsp_website, _app_admin_pubkey, _app_strategy
   
-  _real_website = config['real_website']
+  _rsp_website = config['rsp_website']
   _app_admin_pubkey = wallet.Address(priv_key=config['app_admin_wif'].encode('utf-8')).publicKey().hex()
-  _app_strategy_str = json.dumps(config['strategy'],indent=None,separators=(',',':'))
+  _app_strategy = config['strategy']
   
   global _locker_expired
   stg = config['strategy']
   _locker_expired = refresh_periods[stg.get('session_type',1)&0x07] * (stg.get('session_limit',14)+1)
-  
-  ssi_login_init(config)

@@ -104,7 +104,8 @@ const _NAL = {
     return sw_channel_.host || '';
   },
   
-  strategyVer() {
+  strategyVer(newVer) {
+    if (typeof newVer == 'number') sw_channel_.strategy_ver = newVer;
     return sw_channel_.strategy_ver;  // null means not ready
   },
   
@@ -263,7 +264,7 @@ return ( (name,args) => {
       
       node = rsvdDialog.querySelector('div[name="rsvd-body"]');
       let btn = document.createElement('button');
-      btn.setAttribute('style','border:1px solid transparent; margin:0.25rem 0.5rem; padding:0.5rem 0.75rem; color:#fff; background-color:#198754; border-color:#198754; border-radius:1.5rem;');
+      btn.setAttribute('style','border:1px solid transparent; margin:0.25rem 0.5rem; padding:0.5rem 0.75rem; font-weight:500; color:#fff; background-color:#198754; border-color:#198754; border-radius:1.5rem;');
       
       let i = 0, btn2 = btn;
       while (true) {
@@ -425,6 +426,7 @@ let refresh_task = 0;
 let next_refresh_tm = 0;  // by millisecond
 let max_refresh_tm = 0;   // by second
 
+let refreshURL = '';
 let hmacSegment = null;
 let lastHmacSeg = 0;
 let lastNonceCrc = null;
@@ -438,12 +440,14 @@ function shuffle(arr) {
   }
 }
 
-NAL.strategy = function(stg) {
+NAL.strategy = function(stg, refreshUrl) {
   if (!stg) return STRATEGY;
-  DEFAULT_PERIOD = session_periods[stg.session_type];
+  DEFAULT_PERIOD  = session_periods[stg.session_type];
   DEFAULT_REFRESH = refresh_periods[stg.session_type];
   REFRESH_LIMIT   = stg.session_limit;
   STRATEGY = stg;
+  
+  refreshURL = refreshUrl;
   
   let scanStart = (new Date()).valueOf();
   let scanId = setInterval( () => {
@@ -453,11 +457,13 @@ NAL.strategy = function(stg) {
     let magic = NAL.swMagic();
     let reportVer = NAL.strategyVer();
     let realVer = STRATEGY.strategy_ver;
-    if (typeof magic == 'number' && reportVer && realVer) {
+    if (typeof magic == 'number' && typeof realVer == 'number') {
       if (reportVer !== realVer) {
         NAL.call_('save_strategy',[magic,STRATEGY]).then( data => {
-          if (data === 'OK')
+          if (data === 'OK') {
+            NAL.strategyVer(realVer);
             console.log('! strategy is changed from ' + reportVer + ' to ' + realVer);
+          }
         });
       }
       clearInterval(scanId);
@@ -472,9 +478,10 @@ NAL.cryptoHost = function(renew) {
 };
 
 NAL.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow) {
+  if (!refreshURL) return;
   if (refresh_task) {
     if (role === currRole && nonce1 === clientNonce && nonce2 === serverNonce.toString() && beg === refresh_beg)
-      return false; // no change, do nothing 
+      return; // no change, do nothing 
     
     clearInterval(refresh_task);
     refresh_task = 0;
@@ -519,7 +526,7 @@ NAL.checkStart = function(role, nonce1, nonce2, sessData, beg, now, refreshNow) 
       let tm2 = Math.max(seg * DEFAULT_REFRESH,tm);
       let body = {time:tm2, nonce:Buffer.from(clientNonce).toString('hex')};
       
-      wait__(fetch('login/refresh',{method:'POST',body:JSON.stringify(body)}),30000).then( res => {
+      wait__(fetch(refreshURL,{method:'POST',body:JSON.stringify(body)}),30000).then( res => {
         if (res.status == 200)
           return res.json();
         else if (res.status == 401)

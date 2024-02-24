@@ -14,6 +14,7 @@ def favicon():
 
 @app.route('/is_alive')
 def is_alive():
+  print(request.headers)
   return 'OK'
 
 #------

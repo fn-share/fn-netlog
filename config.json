@@ -1,9 +1,9 @@
 {
-  "nbc_platform_pubkey": "03d72fa51f87d007a9c98e858bb057cb4e280ee1c8d97516af96ec1c9e13d63c36",
-  "nbc_product_pubkey": "02ffef6766b43225e273a5da598037c1787b3b9c1043e99b27a780d06d0ae367bf",
-  "real_admin_pubkey": "028729396e71748b2cb56425335618218bc850a170da1adf59355278836b6b2624",
+  "tee_mono_pubkey": "02ca5a01c9bc6da5fb2377d8467932f793a51574e1285c65c8941bb4409f798292",
+  "tee_manager_site": "https://tee.nb-chain.cn/tee/",
   
-  "real_website": "https://real.fn-share.com",
+  "rsp_website": "https://www.fn-share.com",
+  "rsp_admin_pubkey": "028729396e71748b2cb56425335618218bc850a170da1adf59355278836b6b2624",
   
   "app_admin_wif": "5JcWoESQLRJCy6kTbUr9EEHQB6Txn8Jm1VZsYwcfN5Bp1CXmcB8",
   

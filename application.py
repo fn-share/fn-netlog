@@ -54,22 +54,25 @@ except:
   sys.exit(1)
 
 from root import app
-from root.cloud_web import cloud_web_init
-from root.netlog import netlog_init
-
 application = app
 
+from root.cloud_web import cloud_web_init
 cloud_web_init(config)
+
+from root.netlog import netlog_init
 netlog_init(config)
 
+from root.ssi_login import ssi_login_init
+ssi_login_init(config)
+
 if __name__ == '__main__':
+  print('start web server at http://localhost:3000')
   application.run(host='0.0.0.0',port=3000,debug=sys.flags.debug)
 
 # Usage:
 #   python3 application.py
 # environ variables:
 #   LOCAL_DIR=/home/webapp/data
-#   ROUTE_PREFIX=/netlog
 #   WEB_REALM=netlog.fn-share.com
 #   WEB_NONCE=WEBSITE_SECRET
 #   APP_SECRET=change_it_please

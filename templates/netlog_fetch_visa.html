@@ -56,6 +56,9 @@
   <div><input type="text" id="auth-desc" placeholder="授权方">&nbsp; <button id="btn-save">保存</button></div>
 </div>
 
+<script src="/static/js/nbc_base-0.1.min.js"></script>
+<script src="/static/js/nal-0.2.js"></script>
+
 <script>
 const VISA_ID  = "{{info.hash}}";
 
@@ -72,7 +75,7 @@ function wait__(promise_obj, wait) {
 }
 
 function getVisaCard(retry_num, visaId, callback) {
-  wait__(fetch('../login/visa/'+visaId,option),10000).then( res => {
+  wait__(fetch('/netlog/login/visa/'+visaId),10000).then( res => {
     if (res.status == 200)
       return res.json();
     else if (res.status == 404)
@@ -96,18 +99,20 @@ var cardContent = '';
 
 function saveCardClick(ev) {
   if (!cardContent) return;
-  
   let comefrom = document.querySelector('#auth-desc').value.trim();
-  let nalHost = document.body.dataset.nal_domain || 'fn-share.github.io';
-  let url = 'https://' + nalHost + '/account/api/online/add_card?from=' + encodeURIComponent(comefrom) + '&card=' + cardContent;
-  
-  let frmNode = document.createElement('iframe');
-  frmNode.setAttribute('style','display:none');
-  frmNode.setAttribute('src',url);
-  document.body.appendChild(frmNode);
-  
-  // auto remove iframe node after 60 seconds
-  setTimeout(() => frmNode.remove(),60000);
+  NAL.call('add_card',[comefrom,cardContent]).then(res => {
+    if (typeof res == 'string') {
+      if (res == 'INVALID_CARD' || res == 'MISMATCH_CRC')
+        alert('卡证格式错误');
+      else if (res == 'INVALID_STATE')
+        alert('账户状态错误');
+      else if (res.slice(0,7) == 'FAILED:')
+        alert('操作失败:' + res.slice(7));
+      else if (res.slice(0,8) == 'SUCCESS:')
+        alert('保存成功:' + res.slice(8));
+      else alert(res);
+    }
+  });
 }
 
 window.addEventListener('load', function(ev) {

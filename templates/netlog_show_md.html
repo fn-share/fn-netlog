@@ -10,7 +10,7 @@
 <body>
 
 <div class="md-head-area">
-  <span></span><a target="_blank" href="../index.html">&nbsp;登录&nbsp;</a>
+  <span></span><a target="_blank" href="/static/netlog_index.html">&nbsp;登录&nbsp;</a>
 </div>
 
 <div class="md-body-area"></div>
@@ -85,7 +85,7 @@
 <script src="/static/js/markdown-it-task-lists.min.js"></script>
 
 <script>
-const SITE_INFO = [ "{{info.login_session}}", {{info.modify_at}}, {{info.file_size}},
+const PUBLISH_INFO = [ "{{info.login_session}}", {{info.modify_at}}, {{info.file_size}},
   "{{info.content}}"
 ];
 
@@ -142,7 +142,7 @@ function showMarkdown(source) {
 }
 
 $( () => {
-  let modify_at = SITE_INFO[1];
+  let modify_at = PUBLISH_INFO[1];
   if (modify_at == 0) {
     $('.md-head-area > span').html('尚无内容发布，编辑请先');
     $('.md-body-area').addClass('d-none');
@@ -150,7 +150,7 @@ $( () => {
   else {
     modify_at = (new Date(modify_at * 1000)).toLocaleString();
     $('.md-head-area > span').html(`本文于 ${modify_at} 最后更新，若想编辑请先`);
-    showMarkdown(Base64ToUtf8(SITE_INFO[3]));
+    showMarkdown(Base64ToUtf8(PUBLISH_INFO[3]));
   }
 });
 </script>
