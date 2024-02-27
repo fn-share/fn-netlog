@@ -62,9 +62,6 @@ cloud_web_init(config)
 from root.netlog import netlog_init
 netlog_init(config)
 
-from root.ssi_login import ssi_login_init
-ssi_login_init(config)
-
 if __name__ == '__main__':
   print('start web server at http://localhost:3000')
   application.run(host='0.0.0.0',port=3000,debug=sys.flags.debug)

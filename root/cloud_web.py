@@ -3,9 +3,6 @@
 import traceback
 from flask import request
 
-import logging
-logger = logging.getLogger(__name__)
-
 from . import app
 
 @app.route('/favicon.ico')
@@ -14,10 +11,7 @@ def favicon():
 
 @app.route('/is_alive')
 def is_alive():
-  print(request.headers)
   return 'OK'
-
-#------
 
 def cloud_web_init(config):
   pass

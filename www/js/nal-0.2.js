@@ -251,7 +251,7 @@ return ( (name,args) => {
       rsvdDialog = document.createElement('div');
       rsvdDialog.setAttribute('name','dlg-rsvd');
       rsvdDialog.setAttribute('style','display:none; background:white; position:relative; width:300px; left:calc(50% - 150px); top:68px; border-radius:0.25rem;');
-      rsvdDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">请选择保留字</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div name="rsvd-body" style="border:solid rgba(0,0,0,0.2); border-width:1px 0 0; padding:1.25rem 0 2rem; user-select:none; font-family:monospace; font-size:1rem; line-height:1.5; text-align:center;"></div>';
+      rsvdDialog.innerHTML = '<div style="height:4.5rem"><span style="display:inline-block; float:left; margin:1.25rem; font-size:1.25rem; font-weight:500;">请选择一项</span><button name="btn-cancel" style="display:inline-block; border-width:0; background-color:#fff; font-size:2.25rem; font-weight:200; color:#000; opacity:0.5; float:right; margin:0 8px;">&times;</button></div><div name="rsvd-body" style="border:solid rgba(0,0,0,0.2); border-width:1px 0 0; padding:1.25rem 0 2rem; user-select:none; font-family:monospace; font-size:1rem; line-height:1.5; text-align:center;"></div>';
       maskNode.appendChild(rsvdDialog);
       
       let node = rsvdDialog.querySelector('button[name="btn-cancel"]');

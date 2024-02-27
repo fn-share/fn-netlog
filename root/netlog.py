@@ -30,7 +30,7 @@ if use_s3_file:
   from io import BytesIO
   import boto3
   
-  _bucket_name = 'fns-netlog'
+  _bucket_name = os.environ.get('NETLOG_BUCKET','fns-netlog')
   s3Client = boto3.client('s3',region_name=os.environ.get('AWS_REGION','ap-east-1'))
 
 def md_base_dir(login_sess):
@@ -516,7 +516,7 @@ def netlog_info():
 @app.route('/netlog/')
 @app.route('/netlog/index.html')
 def netlog_index_page():
-  return ('',302,{'Location':'/static/netlog_index.html'})
+  return ('',302,{'Location':'/www/netlog_index.html'})
 
 @app.route('/netlog/md/<login_sess>/res/<img_file>')
 def get_netlog_md_img(login_sess, img_file):
@@ -692,7 +692,7 @@ def post_netlog_locker():
     ret = modify_locker(action,login_sess2,ord(sdat[:1]) < 0x80,sid[:4].hex(),now,tz)
     if isinstance(ret,tuple):
       opened, desc, auto_pub = ret
-      return { 'result':'OK', 'path':'md/'+login_sess2, 
+      return { 'result':'OK', 'path':'/netlog/md/'+login_sess2, 
         'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
     else: return (ret,400)
   
@@ -746,7 +746,7 @@ def post_netlog_auto_publish():
     ret = set_auto_publish(auto_pub,login_sess2,tz)
     if isinstance(ret,tuple):
       opened, desc, auto_pub = ret
-      return { 'result':'OK', 'path':'md/'+login_sess2,
+      return { 'result':'OK', 'path':'/netlog/md/'+login_sess2,
         'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
     else: return (ret,400)  # 'NO_CHANGE' 'NO_EDITING'
   
@@ -798,7 +798,7 @@ def post_netlog_publish():
     ret = publish_editing_text(login_sess2,now,tz)
     if isinstance(ret,tuple):
       opened, desc, auto_pub = ret
-      return { 'result':'OK', 'path':'md/'+login_sess2,
+      return { 'result':'OK', 'path':'/netlog/md/'+login_sess2,
         'opened':opened, 'desc':desc, 'auto_publish':auto_pub }
     else: return (ret,400)  # 'NO_CHANGE' 'NO_EDITING'
   
@@ -886,3 +886,6 @@ def netlog_init(config):
   global _locker_expired
   stg = config['strategy']
   _locker_expired = refresh_periods[stg.get('session_type',1)&0x07] * (stg.get('session_limit',14)+1)
+  
+  from .ssi_login import ssi_login_init
+  ssi_login_init(config)
